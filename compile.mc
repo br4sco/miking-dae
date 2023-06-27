@@ -44,7 +44,6 @@ lang DAECompile =
           else daeStructureToString dae)
     in
     let expr = typeCheck (adBuiltinSymsToConsts (adSymbolize prog)) in
-    let daePEval = daePEval options.constantFold in
     result.bind (daeExprToDAE expr)
       (lam dae.
         let dae =
@@ -67,7 +66,7 @@ lang DAECompile =
             let dae =
               if options.disablePeval then dae
               else
-                let dae = daePEval dae in
+                let dae = daePEval options.constantFold dae in
                 logDebugDAE "DAE after PEval" dae;
                 dae
             in

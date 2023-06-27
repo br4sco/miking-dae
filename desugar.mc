@@ -142,7 +142,21 @@ lang DAEParseDesugar = DAEParseAst + DAEAst
       ty = ty,
       info = r.info
     }
-  | PrimDAEExpr r -> TmPrim (daeDesugarExpr r.left)
+  | PrimDAEExpr r ->
+    recursive let recur = lam order. lam expr.
+      switch expr
+      case VarDAEExpr varr then TmDVar {
+        ident = varr.name.v,
+        order = order,
+        info = r.info,
+        ty = TyUnknown { info = r.info }
+      }
+      case PrimDAEExpr primr then
+        recur (succ order) primr.left
+      case _ then error "daeDesugarExpr: Undefined"
+      end
+    in
+    recur 1 r.left
 
   sem daeDesugarTop : DAETop -> Expr
   sem daeDesugarTop =
@@ -158,6 +172,7 @@ lang DAEParseDesugar = DAEParseAst + DAEAst
   sem daeDesugarEqn =
   | EqnDAEEqn r -> subf_ (daeDesugarExpr r.left) (daeDesugarExpr r.right)
 
+  -- Assumes a well-formed DAE program.
   sem daeDesugarProg : DAEProg -> Expr
   sem daeDesugarProg =
   | DAEProg r ->
@@ -193,9 +208,9 @@ lang DAEParseDesugar = DAEParseAst + DAEAst
       optionBind (daeResugarExpr right) (lam right.
         daeResugarBinOp { info = info, left = left, right = right } c))
   | TmApp {
-      lhs = TmConst { val = c, info = info },
-      rhs = right,
-      info = info
+    lhs = TmConst { val = c, info = info },
+    rhs = right,
+    info = info
   } ->
     optionBind (daeResugarExpr right) (lam right.
       daeResugarUnOp { info = info, right = right } c)
@@ -319,12 +334,12 @@ lang DAEParseDesugar = DAEParseAst + DAEAst
   | PatRecord r ->
     optionMap (lam names. TupleDAEPat { info = r.info, names = names })
       ((optionCompose
-         (optionMapM
-            (lam p.
+          (optionMapM
+             (lam p.
                match p with PatNamed {ident = PName v, info = i} then
                  Some { i = i, v = v }
                else None ()))
-            record2tuple)
+          record2tuple)
          r.bindings)
   | _ -> None ()
 end
@@ -379,20 +394,20 @@ let expectedExpr = parseDAEExprExn "
   {
     ieqns =
       (subf x 1.,
-       subf (prim vy) (subf 0. 1.)),
+       subf (prim 1 vy) (subf 0. 1.)),
 
     eqns =
-      (subf vx (prim x),
-       subf vy (prim y),
-       subf (prim vx) (mul x h),
-       subf (prim vy) (subf (mul y h) 1.),
+      (subf vx (prim 1 x),
+       subf vy (prim 1 y),
+       subf (prim 1 vx) (mul x h),
+       subf (prim 1 vy) (subf (mul y h) 1.),
        subf (addf (pow2 x) (pow2 y)) (pow2 1.)),
 
     output =
       (
         x,
         vx,
-        prim vx
+        prim 1 vx
       )
   }
   "
