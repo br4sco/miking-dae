@@ -104,8 +104,14 @@ lang DAEParseAnalysis = DAEAst + DAEParsePrettyPrint
   sem daeExprAllowPrimWellFormed : all a. DAEExpr -> Res DAEExpr
   sem daeExprAllowPrimWellFormed =
   | expr & PrimDAEExpr r ->
-    match r.left with VarDAEExpr _ then
-      result.ok expr
+    recursive let recur = lam expr.
+      switch expr
+      case VarDAEExpr _ then true
+      case PrimDAEExpr r then recur r.left
+      case _ then false
+      end
+    in
+    if recur r.left then result.ok expr
     else
       result.err {
         errorDefault with

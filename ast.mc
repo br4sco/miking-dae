@@ -22,96 +22,100 @@ lang DAEAst = DAEParseAst + AstResult +
   MExprSym + MExprEq + MExprPrettyPrint + MExprTypeCheck + AD +
   BootParser + KeywordMaker
 
+  type TmDVarRec = {
+    ident : Name,
+    order : Int,
+    ty : Type,
+    info : Info
+  }
+
   syn Expr =
-  -- e' in MExpr
-  | TmPrim Expr
-  -- -- x(t):T in MExpr
-  -- | TmVarDecl {
-  --   ty : Type,
-  --   info : Info
-  -- }
+  -- x^(n) in MExpr
+  | TmDVar TmDVarRec
+
+  sem tmVarRecToTmDVarRec
+    : TmDVarRec -> ({ident : Name, ty : Type, info : Info, frozen : Bool}, Int)
+  sem tmVarRecToTmDVarRec =
+  | r -> ({ ident = r.ident, ty = r.ty, info = r.info, frozen = false }, r.order)
+
+  sem tmDVarRecToTmVarRec
+    : Int -> {ident : Name, ty : Type, info : Info, frozen : Bool} -> TmDVarRec
+  sem tmDVarRecToTmVarRec order =| r ->
+    { ident = r.ident, ty = r.ty, info = r.info, order = order }
 
   -- Accessors
   sem infoTm =
-  | TmPrim t -> infoTm t
-  -- | TmVarDecl r -> r.info
+  | TmDVar r -> r.info
 
   sem tyTm =
-  | TmPrim t -> tyTm t
-  -- | TmVarDecl r -> r.ty
+  | TmDVar r -> r.ty
 
   sem withInfo info =
-  | TmPrim t -> TmPrim (withInfo info t)
-  -- | TmVarDecl r -> TmVarDecl { r with info = info }
+  | TmDVar r -> TmDVar { r with info = info }
 
   sem withType ty =
-  | TmPrim t -> TmPrim (withType ty t)
-  -- | TmVarDecl r -> TmVarDecl { r with ty = ty }
-
-  -- Shallow maps/folds
-  sem smapAccumL_Expr_Expr f acc =
-  | TmPrim t ->
-    match f acc t with (acc, t) in
-    (acc, TmPrim t)
+  | TmDVar r -> TmDVar { r with ty = ty }
 
   -- KeywordMaker
   sem isKeyword =
-  | TmPrim _ -> true
-  -- | TmVarDecl _ -> true
+  | TmDVar _ -> true
 
   sem matchKeywordString (info : Info) =
   | "prim" ->
-    Some (1, lam lst. TmPrim (get lst 0))
-  -- | "var" ->
-  --   Some (0, lam lst. TmVarDecl { info = info, ty = TyUnknown { info = info }})
+    Some (2, lam lst.
+      match lst with [TmConst { val = CInt { val = order }}, TmVar r] then
+        TmDVar (tmDVarRecToTmVarRec order r)
+      else errorSingle [info] "Invalid application use prim")
+
 
   -- Eq
   sem eqExprH (env : EqEnv) (free : EqEnv) (lhs : Expr) =
-  | TmPrim r ->
-    match lhs with TmPrim l then eqExprH env free l r
+  | TmDVar r ->
+    match lhs with TmDVar l then
+      match (tmVarRecToTmDVarRec l, tmVarRecToTmDVarRec r)
+        with
+        ((lvarr, lorder),  (rvarr, rorder))
+      in
+      if eqi lorder rorder then
+        eqExprH env free (TmVar lvarr) (TmVar rvarr)
+      else None ()
     else None ()
-  -- | TmLet {ident = rident, body = TmVarDecl _, inexpr = rinexpr} ->
-  --   match lhs with
-  --     TmLet {ident = lident, body = TmVarDecl _, inexpr = linexpr}
-  --   then
-  --     let varEnv = biInsert (lident, rident) env.varEnv in
-  --     eqExprH {env with varEnv = varEnv} free linexpr rinexpr
-  --   else None ()
+
+  -- Cmp
+  sem cmpExprH =
+  | (TmDVar l, TmDVar r) ->
+    match (tmVarRecToTmDVarRec l, tmVarRecToTmDVarRec r)
+      with ((l, lorder), (r, rorder))
+    in
+    if eqi lorder rorder then cmpExprH (TmVar l, TmVar r)
+    else subi lorder rorder
 
   -- PrettyPrint
   sem isAtomic =
-  | TmPrim _ -> false
+  | TmDVar _ -> false
   -- | TmVarDecl _ -> true
 
   sem pprintCode (indent : Int) (env : PprintEnv) =
-  | TmPrim t ->
-    match pprintCode indent env t with (env, arg) in
-    (env, join ["prim", pprintNewline indent, arg])
-  -- | TmVarDecl _ ->
-  --   (env, join ["var"])
+  | TmDVar r ->
+    match tmVarRecToTmDVarRec r with (varr, order) in
+    match pprintCode indent env (TmVar varr) with (env, var) in
+    (env, strJoin " " ["prim", int2string order, var])
+
+  -- Sym
+  sem symbolizeExpr (env : SymEnv) =
+  | TmDVar r ->
+    match tmVarRecToTmDVarRec r with (r, order) in
+    match symbolizeExpr env (TmVar r) with TmVar r then
+      TmDVar (tmDVarRecToTmVarRec order r)
+    else error "Impossible"
 
   -- Type Check
   sem typeCheckExpr env =
-  | TmPrim t -> TmPrim (typeCheckExpr env t)
-  -- | TmLet (r & {body = TmVarDecl _}) ->
-  --   switch r.tyAnnot
-  --   case TyUnknown _ then
-  --     let msg = join [
-  --       "* Encountered an untyped dependent variable: ",
-  --       nameGetStr r.ident, "\n",
-  --       "* When type checking the expression\n"
-  --     ] in
-  --     errorSingle [r.info] msg
-  --   case ty then
-  --     let inexpr = typeCheckExpr (_insertVar r.ident ty env) r.inexpr in
-  --     TmLet {
-  --       r with
-  --       body = withType ty r.body,
-  --       tyBody = ty,
-  --       inexpr = inexpr,
-  --       ty = tyTm inexpr
-  --     }
-  --   end
+  | TmDVar r ->
+    match tmVarRecToTmDVarRec r with (varr, order) in
+    match typeCheckExpr env (TmVar varr) with TmVar varr then
+      TmDVar (tmDVarRecToTmVarRec order varr)
+    else error "impossible"
 
   -- Parse
   sem parseDAEExprExn : String -> Expr

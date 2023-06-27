@@ -531,7 +531,8 @@ lang DAEExpr = DAE + DAEAst + DAEParsePrettyPrint + MExprFreeVars
       (dae, result.ok t)
     else
       (dae, result.ok t)
-  | TmPrim (TmVar r) ->
+  | t & TmDVar r ->
+    match tmVarRecToTmDVarRec r with (r, 1) then
     optionMapOrElse
       (lam.
         optionMapOrElse
@@ -558,16 +559,8 @@ lang DAEExpr = DAE + DAEAst + DAEParsePrettyPrint + MExprFreeVars
           (mapLookup r.ident dae.vars))
       (lam ident. (dae, result.ok (TmVar { r with ident = ident })))
       (mapLookup (r.ident, 1) dae.depVarNameMap)
-  | TmPrim t ->
-    let err = {
-      errorDefault with
-      msg = join [
-        "Invalid use of prim (').",
-        "It can only be applied on dependent variables"
-      ],
-      info = infoTm t
-    } in
-    (dae, result.err err)
+    else
+      (dae, result.err (_exprStructureErrorMsg (infoTm t)))
   | t -> smapAccumL_ResultM_Expr_Expr daeExprToExpr dae t
 end
 
