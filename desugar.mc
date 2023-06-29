@@ -173,22 +173,8 @@ lang DAEParseDesugar = DAEAst
   | EqnDAEEqn r -> subf_ (daeDesugarExpr r.left) (daeDesugarExpr r.right)
 
   -- Assumes a well-formed DAE program.
-  sem daeDesugarProg : DAEProg -> Expr
+  sem daeDesugarProg : DAEProg -> TmDAERec
   sem daeDesugarProg =
-  | ProgDAEProg r ->
-    bindall_
-      (snoc
-         (map daeDesugarTop r.tops)
-         (nlams_
-            (sort (lam x. lam y. nameCmp x.0 y.0) (join (map daeDesugarVars r.vars)))
-            (urecord_ [
-              ("ieqns", utuple_ (map daeDesugarEqn r.ieqns)),
-              ("eqns", utuple_ (map daeDesugarEqn r.eqns)),
-              ("out", daeDesugarExpr r.output)
-            ])))
-
-  sem daeDesugarProg2 : DAEProg -> TmDAERec
-  sem daeDesugarProg2 =
   | ProgDAEProg r ->
     let bindings = bindall_ (snoc (map daeDesugarTop r.tops) unit_) in
     let vars = join (map daeDesugarVars r.vars) in
@@ -404,11 +390,11 @@ let expectedExpr = parseDAEExprExn "
   let mul = lam x. lam y. mulf x y in
   let pow2 = lam x. mul x x in
 
-  lam h : Float.
   lam x : Float.
-  lam y : Float.
   lam vx : Float.
+  lam y : Float.
   lam vy : Float.
+  lam h : Float.
   {
     ieqns =
       (subf x 1.,
@@ -431,20 +417,11 @@ let expectedExpr = parseDAEExprExn "
   "
 in
 
-let expr = typeCheck (adSymbolize (daeDesugarProg prog)) in
-
-logMsg logLevel.debug
-  (lam.
-    strJoin "\n" ["Output program:", expr2str expr]);
-
-utest expr with expectedExpr using eqExpr in
-
-let expr = typeCheck (adSymbolize (TmDAE (daeDesugarProg2 prog))) in
-
-logMsg logLevel.debug
-  (lam.
-    strJoin "\n" ["Output program:", expr2str expr]);
-
-utest expr with TmDAE (_tmToTmDAERec expectedExpr) using eqExpr in
-
-()
+let daer = daeDesugarProg prog in
+match typeCheck (adSymbolize (TmDAE daer)) with TmDAE daer then
+  logSetLogLevel logLevel.error;
+  logMsg logLevel.debug
+    (lam. strJoin "\n" ["Output program:", expr2str (TmDAE daer)]);
+  utest TmDAE daer with TmDAE (_tmToTmDAERec expectedExpr) using eqExpr in
+  ()
+else error "impossible"

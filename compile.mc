@@ -6,7 +6,7 @@ include "mexpr/ast-builder.mc"
 include "mexpr/utils.mc"
 include "mexpr/symbolize.mc"
 
-include "./dae2.mc"
+include "./dae.mc"
 include "./desugar.mc"
 include "./dae-arg.mc"
 
@@ -44,7 +44,7 @@ lang DAECompile = DAE + MExprConstantFold + MExprFindSym + MExprSubstitute + Boo
       in
       let runtime = symbolize runtime in
       let runtimeNames = [
-        "daeRuntimeRun2", "sin", "cos", "exp", "pow", "sqrt"
+        "daeRuntimeRun", "sin", "cos", "exp", "pow", "sqrt"
       ] in
       let runtimeNames =
         foldl2
@@ -77,7 +77,7 @@ lang DAECompile = DAE + MExprConstantFold + MExprFindSym + MExprSubstitute + Boo
       in
       -- Generate runtime
       let t =
-        (appSeq_ (nvar_ (mapFindExn "daeRuntimeRun2" runtimeNames)) [
+        (appSeq_ (nvar_ (mapFindExn "daeRuntimeRun" runtimeNames)) [
           (bool_ options.debugRuntime),
           (bool_ options.numericJac),
           seq_ (map bool_ isdiffvars),
@@ -114,17 +114,17 @@ let _parse = lam prog.
   let prog = daeParseExn "internal" prog in
   logMsg logLevel.debug
     (lam. strJoin "\n" ["Input program:", daeProgToString prog]);
-  let t = typeCheck (adSymbolize (daeDesugarProg prog)) in
-  logMsg logLevel.debug
-    (lam. strJoin "\n" ["MExpr program:", expr2str t]);
-  t
+  let daer = daeDesugarProg prog in
+  match typeCheck (adSymbolize (TmDAE daer)) with TmDAE daer then
+    daer
+  else error "impossible"
 in
 
 -------------------
 -- Test Pendulum --
 -------------------
 
-logSetLogLevel logLevel.debug;
+logSetLogLevel logLevel.error;
 
 let dae = _parse "
   let mul = lam x. lam y. x*y end

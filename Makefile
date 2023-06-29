@@ -11,7 +11,9 @@ test: $(TESTS)
 test-compiled: $(TESTBINS)
 
 test-examples: peadae.exe
-	make test -C examples
+	$(MAKE) test -C examples
+
+test-all: test-compiled test-examples
 
 %.test: %.mc
 	mi --test $<
