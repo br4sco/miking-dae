@@ -23,7 +23,7 @@ let setToString = lam elToString. lam set.
 let tupleToString2 = lam elToString0. lam elToString1. lam x.
   join ["(", elToString0 x.0, ", ", elToString1 x.1, ")"]
 
-lang DAEParsePrettyPrintBase = IdentifierPrettyPrint + DAEProgAst
+lang DAEParsePrettyPrintBase = IdentifierPrettyPrint + ProgDAEProgAst
   type DAEPPCtx = {
     env : PprintEnv,
     indent : Int,
@@ -91,7 +91,7 @@ lang DAEParsePrettyPrintBase = IdentifierPrettyPrint + DAEProgAst
 
   sem daeProgToStringH : DAEPPCtx -> DAEProg -> (DAEPPCtx, String)
   sem daeProgToStringH ctx =
-  | DAEProg r ->
+  | ProgDAEProg r ->
     match
       mapAccumL daeTopToStringH ctx r.tops
       with (ctx, tops)

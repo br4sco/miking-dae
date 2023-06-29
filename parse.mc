@@ -36,7 +36,7 @@ lang DAEParseAnalysis = DAEAst + DAEParsePrettyPrint
 
   sem daeProgWellFormed : all a. DAEProg -> Res DAEProg
   sem daeProgWellFormed =
-  | prog & DAEProg r ->
+  | prog & ProgDAEProg r ->
     result.withAnnotations
       (result.withAnnotations
          (foldl daeVarWellFormed (setEmpty nameCmp, result.ok ()) r.vars).1

@@ -1,17 +1,18 @@
 include "arg.mc"
 
+include "./ast.mc"
 include "./error-print.mc"
 include "./dae-arg.mc"
 include "./parse.mc"
 include "./desugar.mc"
+include "./pprint.mc"
 include "./compile.mc"
 
 lang PEADAE =
+  DAEAst +
+  DAEParseAst +
   DAEParseDesugar +
   DAEParseAnalysis +
-  DAEExpr +
-  DAEStructuralAnalysis +
-  DAEPrettyPrint +
   DAECompile
 end
 
@@ -31,10 +32,9 @@ case ParseOK r then
       let prog = parseDAEParseExn filename (readFile filename) in
       result.bind (daeProgWellFormed prog)
         (lam prog.
-          result.bind (daeCompile r.options (daeDesugarProg prog))
-            (lam expr.
-              printLn (strJoin "\n" ["mexpr", expr2str expr]);
-              result.ok ()))
+          let t = daeCompile r.options (daeDesugarProg2 prog) in
+          printLn (strJoin "\n" ["mexpr", expr2str t]);
+          result.ok ())
     in
     consumeWarnErrsExn res
 case result then

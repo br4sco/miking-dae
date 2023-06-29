@@ -11,7 +11,7 @@ include "mexpr/builtin.mc"
 include "./ast_gen.mc"
 include "./parse.mc"
 
-lang DAEParseDesugar = DAEParseAst + DAEAst
+lang DAEParseDesugar = DAEAst
   sem daeDesugarType : DAEType -> Type
   sem daeDesugarType =
   | FloatDAEType r -> TyFloat { info = r.info }
@@ -175,7 +175,7 @@ lang DAEParseDesugar = DAEParseAst + DAEAst
   -- Assumes a well-formed DAE program.
   sem daeDesugarProg : DAEProg -> Expr
   sem daeDesugarProg =
-  | DAEProg r ->
+  | ProgDAEProg r ->
     bindall_
       (snoc
          (map daeDesugarTop r.tops)
@@ -189,7 +189,7 @@ lang DAEParseDesugar = DAEParseAst + DAEAst
 
   sem daeDesugarProg2 : DAEProg -> TmDAERec
   sem daeDesugarProg2 =
-  | DAEProg r ->
+  | ProgDAEProg r ->
     let bindings = bindall_ (snoc (map daeDesugarTop r.tops) unit_) in
     let vars = join (map daeDesugarVars r.vars) in
     let ieqns = map daeDesugarEqn r.ieqns in
