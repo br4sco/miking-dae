@@ -32,7 +32,7 @@ case ParseOK r then
       let prog = parseDAEParseExn filename (readFile filename) in
       result.bind (daeProgWellFormed prog)
         (lam prog.
-          let t = daeCompile r.options (daeDesugarProg2 prog) in
+          let t = daeCompile r.options (daeDesugarProg prog) in
           printLn (strJoin "\n" ["mexpr", expr2str t]);
           result.ok ())
     in
