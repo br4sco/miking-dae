@@ -50,7 +50,7 @@ prod VarsDAEVar: DAEVar = names:LName ("," names:LName)* ":" ty:DAEType
 prod LetDAETop: DAETop = "let" name:LName "=" arg:DAEExpr "end"
 
 -- Program
-prod DAEProg: DAEProg =
+prod Prog: DAEProg =
   (tops:DAETop)*
   "variables"
   (vars:DAEVar) (";" vars:DAEVar)*
