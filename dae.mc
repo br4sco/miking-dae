@@ -438,17 +438,11 @@ lang DAEExpr = DAE + DAEAst + DAEParsePrettyPrint + MExprFreeVars
 
   sem daeExprBodyToDAEH : DAE -> Expr -> Res DAE
   sem daeExprBodyToDAEH dae =
-  | TmLet r ->
-    match daeExprToExpr dae r.body with (dae, body) in
-    result.bind body
-      (lam body.
-        let dae = { dae with bindings = snoc dae.bindings (r.ident, body) } in
-        daeExprBodyToDAEH dae r.inexpr)
   | TmRecord r ->
     switch
       map
         (lam l. mapLookup (stringToSid l) r.bindings)
-        ["ieqns", "eqns", "output"]
+        ["ieqns", "eqns", "out"]
     case [Some (TmRecord ieqns), Some (TmRecord eqns), Some output] then
       match map (lam r. record2tuple r.bindings) [ieqns, eqns] with
         [Some ieqns, Some eqns]

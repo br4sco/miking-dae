@@ -10,6 +10,7 @@ include "mexpr/boot-parser.mc"
 include "map.mc"
 include "result.mc"
 include "error.mc"
+include "tuple.mc"
 
 include "./ast_gen.mc"
 include "../miking-pead/ad.mc"
@@ -17,6 +18,8 @@ include "../miking-pead/ad.mc"
 type Res a = Result ErrorSection ErrorSection a
 
 let _daeAstKeywords = ["prim"]
+
+let dvarCmp = tupleCmp2 nameCmp subi
 
 lang DAEAst = DAEParseAst + AstResult +
   MExprSym + MExprEq + MExprPrettyPrint + MExprTypeCheck + AD +
@@ -29,9 +32,19 @@ lang DAEAst = DAEParseAst + AstResult +
     info : Info
   }
 
+  type TmDAERec = {
+    bindings : Expr,
+    vars : [(Name, Type)],
+    ieqns : [Expr],
+    eqns : [Expr],
+    out : Expr,
+    info : Info
+  }
+
   syn Expr =
   -- x^(n) in MExpr
   | TmDVar TmDVarRec
+  | TmDAE TmDAERec
 
   sem tmVarRecToTmDVarRec
     : TmDVarRec -> ({ident : Name, ty : Type, info : Info, frozen : Bool}, Int)
@@ -43,18 +56,103 @@ lang DAEAst = DAEParseAst + AstResult +
   sem tmDVarRecToTmVarRec order =| r ->
     { ident = r.ident, ty = r.ty, info = r.info, order = order }
 
+  sem _tmDAERecToTm : TmDAERec -> Expr
+  sem _tmDAERecToTm =| r ->
+    bind_ r.bindings
+      (nlams_ r.vars
+         (urecord_ [
+           ("ieqns", utuple_ r.ieqns),
+           ("eqns", utuple_ r.eqns),
+           ("out", r.out)
+         ]))
+
+  sem _tmToTmDAERec : Expr -> TmDAERec
+  sem _tmToTmDAERec =
+  | t -> _tmToTmDAERecH {
+    bindings = bind_ t unit_,
+    vars = [],
+    ieqns = [],
+    eqns = [],
+    out = unit_,
+    info = infoTm t
+  } t
+
+  sem _tmToTmDAERecErrMsg msg =| t ->
+    errorSingle [infoTm t]
+      (strJoin "\n" [join ["daeExprToDAERec: ", msg, ":"], expr2str t])
+
+  sem _tmToTmDAERecH : TmDAERec -> Expr -> TmDAERec
+  sem _tmToTmDAERecH dae =
+  | TmLet r -> _tmToTmDAERecH dae r.inexpr
+  | TmRecLets r -> _tmToTmDAERecH dae r.inexpr
+  | TmLam (r & {body = TmLam _}) ->
+    let dae = { dae with vars = snoc dae.vars (r.ident, r.tyParam) } in
+    _tmToTmDAERecH dae r.body
+  | TmLam (lamr & {body = t & TmRecord r}) ->
+    let dae = { dae with vars = snoc dae.vars (lamr.ident, lamr.tyParam) } in
+    switch
+      map
+        (lam l. mapLookup (stringToSid l) r.bindings)
+        ["ieqns", "eqns", "out"]
+    case [Some (TmRecord ieqns), Some (TmRecord eqns), Some out] then
+      match map (lam r. record2tuple r.bindings) [ieqns, eqns] with
+        [Some ieqns, Some eqns]
+      then
+        {
+          dae with
+          ieqns = ieqns,
+          eqns = eqns,
+          out = out
+        }
+      else _tmToTmDAERecErrMsg "Malformed record" t
+    case _ then _tmToTmDAERecErrMsg "Malformed lambda body" t
+    end
+  | t -> _tmToTmDAERecErrMsg "Malformed expression" t
+
   -- Accessors
   sem infoTm =
   | TmDVar r -> r.info
+  | TmDAE r -> r.info
 
   sem tyTm =
   | TmDVar r -> r.ty
+  | TmDAE r -> tyTm r.out
 
   sem withInfo info =
   | TmDVar r -> TmDVar { r with info = info }
+  | TmDAE r -> TmDAE { r with info = info }
 
   sem withType ty =
   | TmDVar r -> TmDVar { r with ty = ty }
+  | TmDAE r -> TmDAE { r with out = withType ty r.out }
+
+  -- Shallow map/fold
+  sem smapAccumL_Expr_Expr f acc =
+  | TmDAE r ->
+    match f acc r.bindings with (acc, bindings) in
+    match mapAccumL f acc r.ieqns with (acc, ieqns) in
+    match mapAccumL f acc r.eqns with (acc, eqns) in
+    match f acc r.out with (acc, out) in
+    (acc,
+     TmDAE {
+       r with bindings = bindings, ieqns = ieqns, eqns = eqns, out = out
+     })
+
+  -- Dependet variables
+  sem dvarsExpr : Set (Name, Int) -> Expr -> Set (Name, Int)
+  sem dvarsExpr dvars =
+  | TmDVar r -> setInsert (r.ident, r.order) dvars
+  | t -> sfold_Expr_Expr dvarsExpr dvars t
+
+  sem dvars : Expr -> Set (Name, Int)
+  sem dvars =| t -> dvarsExpr (setEmpty (tupleCmp2 nameCmp subi)) t
+
+  -- AD
+  sem adExprH ctx n =
+  | TmDVar r ->
+    let b = peadAstBuilder r.info in
+    b.taylorcoef
+      (create (succ n) (lam i. TmDVar { r with order = addi r.order i }))
 
   -- KeywordMaker
   sem isKeyword =
@@ -80,6 +178,10 @@ lang DAEAst = DAEParseAst + AstResult +
         eqExprH env free (TmVar lvarr) (TmVar rvarr)
       else None ()
     else None ()
+  | TmDAE r ->
+    match lhs with TmDAE l then
+      eqExprH env free (_tmDAERecToTm l) (_tmDAERecToTm r)
+    else None ()
 
   -- Cmp
   sem cmpExprH =
@@ -89,17 +191,19 @@ lang DAEAst = DAEParseAst + AstResult +
     in
     if eqi lorder rorder then cmpExprH (TmVar l, TmVar r)
     else subi lorder rorder
+  | (TmDAE r, TmDAE l) -> cmpExprH (_tmDAERecToTm l, _tmDAERecToTm r)
 
   -- PrettyPrint
   sem isAtomic =
   | TmDVar _ -> false
-  -- | TmVarDecl _ -> true
+  | TmDAE _ -> false
 
   sem pprintCode (indent : Int) (env : PprintEnv) =
   | TmDVar r ->
     match tmVarRecToTmDVarRec r with (varr, order) in
     match pprintCode indent env (TmVar varr) with (env, var) in
     (env, strJoin " " ["prim", int2string order, var])
+  | TmDAE r -> pprintCode indent env (_tmDAERecToTm r)
 
   -- Sym
   sem symbolizeExpr (env : SymEnv) =
@@ -108,6 +212,8 @@ lang DAEAst = DAEParseAst + AstResult +
     match symbolizeExpr env (TmVar r) with TmVar r then
       TmDVar (tmDVarRecToTmVarRec order r)
     else error "Impossible"
+  | TmDAE r -> TmDAE (_tmToTmDAERec (symbolizeExpr env (_tmDAERecToTm r)))
+
 
   -- Type Check
   sem typeCheckExpr env =
@@ -116,6 +222,7 @@ lang DAEAst = DAEParseAst + AstResult +
     match typeCheckExpr env (TmVar varr) with TmVar varr then
       TmDVar (tmDVarRecToTmVarRec order varr)
     else error "impossible"
+  | TmDAE r -> TmDAE (_tmToTmDAERec (typeCheckExpr env (_tmDAERecToTm r)))
 
   -- Parse
   sem parseDAEExprExn : String -> Expr
