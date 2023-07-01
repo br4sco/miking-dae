@@ -12,7 +12,9 @@ include "./dae-arg.mc"
 
 let peadaeNameSpace = "PEADAE"
 
-lang DAECompile = DAE + MExprConstantFold + MExprFindSym + MExprSubstitute + BootParser
+lang DAECompile =
+  DAE + MExprConstantFold + MExprFindSym + MExprSubstitute + BootParser + CSE
+
 
   sem daeSrcPathExn : () -> String
   sem daeSrcPathExn =| () ->
@@ -26,8 +28,6 @@ lang DAECompile = DAE + MExprConstantFold + MExprFindSym + MExprSubstitute + Boo
 
   sem daeCompile : Options -> TmDAERec -> Expr
   sem daeCompile options =| daer ->
-    (if options.debugCompilation then logSetLogLevel logLevel.debug else ());
-    let expr = typeCheck (adBuiltinSymsToConsts (adSymbolize prog)) in
     let logDebug = lam head. lam msg.
       logDebug (lam. strJoin "\n" [join ["daeCompile:", msg, ":"], msg])
     in
@@ -44,7 +44,7 @@ lang DAECompile = DAE + MExprConstantFold + MExprFindSym + MExprSubstitute + Boo
       in
       let runtime = symbolize runtime in
       let runtimeNames = [
-        "daeRuntimeRun", "sin", "cos", "exp", "pow", "sqrt"
+        "daeRuntimeRun", "sin", "cos", "exp", "pow", "sqrt", "onehot"
       ] in
       let runtimeNames =
         foldl2
@@ -61,19 +61,34 @@ lang DAECompile = DAE + MExprConstantFold + MExprFindSym + MExprSubstitute + Boo
       let state = daeFirstOrderState analysis.varOffset in
       let isdiffvars = daeIsDiffVars state in
       let daer = daeOrderReduce state (nameSym "y") (nameSym "yp") daer in
-      let iexpr = daeGenInitExpr state daer in
-      let rexpr = daeGenResExpr daer in
-      let oexpr = daeGenOutExpr daer in
+      let ts = [
+        daeGenInitExpr state daer,
+        daeGenResExpr daer,
+        daeGenOutExpr daer
+      ]
+      in
       match
-        if options.disablePeval then (iexpr, rexpr, oexpr)
-        else (peval iexpr, peval rexpr, peval oexpr)
-        with (iexpr, rexpr, oexpr)
+        if options.disablePeval then ts
+        else map (lam t. foldLets (peval t)) ts
+        with [iexpr, rexpr, oexpr]
       in
       match
         if options.constantFold then
           (constantfold iexpr, constantfold rexpr, constantfold oexpr)
         else (iexpr, rexpr, oexpr)
         with (iexpr, rexpr, oexpr)
+      in
+      match
+        if options.cse then
+          (cse iexpr, cse rexpr, cse oexpr)
+        else (iexpr, rexpr, oexpr)
+        with (iexpr, rexpr, oexpr)
+      in
+      match
+        if options.numericJac then (ulam_ "" never_, ulam_ "" never_) else
+          (daeGenMixedJacY options.jacSpecThreshold daer,
+           daeGenMixedJacYp options.jacSpecThreshold daer)
+        with (jacY, jacYp)
       in
       -- Generate runtime
       let t =
@@ -83,8 +98,8 @@ lang DAECompile = DAE + MExprConstantFold + MExprFindSym + MExprSubstitute + Boo
           seq_ (map bool_ isdiffvars),
           iexpr,
           rexpr,
-          ulam_ "" never_,
-          ulam_ "" never_,
+          jacY,
+          jacYp,
           oexpr
         ])
       in
@@ -101,8 +116,6 @@ lang DAECompile = DAE + MExprConstantFold + MExprFindSym + MExprSubstitute + Boo
       bind_ runtime t
     else error "impossible"
 end
-
-
 
 lang TestLang = DAEParseAnalysis + DAEParseDesugar + DAECompile end
 

@@ -214,7 +214,6 @@ lang DAEAst = DAEParseAst + AstResult +
     else error "Impossible"
   | TmDAE r -> TmDAE (_tmToTmDAERec (symbolizeExpr env (_tmDAERecToTm r)))
 
-
   -- Type Check
   sem typeCheckExpr env =
   | TmDVar r ->
