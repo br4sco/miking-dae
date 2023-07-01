@@ -13,7 +13,7 @@ test-compiled: $(TESTBINS)
 test-examples: peadae.exe
 	$(MAKE) test -C examples
 
-test-all: test-compiled test-examples
+test-all: test test-examples
 
 %.test: %.mc
 	mi --test $<

@@ -10,6 +10,8 @@ let debugPrint = lam msg.
     flushStderr ()
   else ()
 
+let onehot = lam n. lam i. create n (lam j. if eqi i j then 1. else 0.)
+
 type Vec = Tensor[Float]
 type Mat = Tensor[Float]
 
@@ -37,7 +39,8 @@ let errorExit = lam. print (usage ()); print "\n"; exit 1
 
 type DAEInit = ([Float], [Float])
 type DAEResf = [Float] -> [Float] -> [Float]
-type DAEJacf = [Float] -> [Float] -> [((Int, Int), Float)]
+type DAEJacVals = [((Int, Int), Float)]
+type DAEJacf = [Float] -> [Float] -> [DAEJacVals]
 type DAEOutf = [Float] -> [Float] -> ()
 
 let daeRuntimeRun
@@ -84,15 +87,17 @@ let daeRuntimeRun
           let y = create n (vget jacargs.y) in
           let yp = create n (vget jacargs.yp) in
           let m = sundialsMatrixDenseUnwrap m in
-          iter (lam ijv.
-            match ijv with ((i, j), v) in
-            -- m is in column-major format
-            mset m j i v)
+          iter
+            (iter (lam ijv.
+              match ijv with ((i, j), v) in
+              -- m is in column-major format
+              mset m j i v))
             (jacYf y yp);
-          iter (lam ijv.
-            match ijv with ((i, j), v) in
-            -- m is in column-major format
-            mset m j i (addf (mget m j i) (mulf jacargs.c v)))
+          iter
+            (iter (lam ijv.
+              match ijv with ((i, j), v) in
+              -- m is in column-major format
+              mset m j i (addf (mget m j i) (mulf jacargs.c v))))
             (jacYpf y yp);
           ()
         in
@@ -149,5 +154,6 @@ mexpr
 dprint [
   dprint [daeRuntimeRun],
   dprint [sin, cos, exp, sqrt],
-  dprint [pow]
+  dprint [pow],
+  dprint [onehot]
 ]

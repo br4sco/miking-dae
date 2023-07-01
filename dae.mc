@@ -20,7 +20,7 @@ let daeID : (Name, Int) -> Name
         modref _daeIDMap (mapInsert id name daeIDMap);
         name
 
-lang DAE = DAEAst + MExprFreeVars
+lang DAE = DAEAst + MExprFreeVars + MExprConstantFold
   sem daeAnnotDVars : TmDAERec -> TmDAERec
   sem daeAnnotDVars =| dae ->
     let vars = mapFromSeq nameCmp dae.vars in
@@ -117,6 +117,29 @@ lang DAE = DAEAst + MExprFreeVars
     in
     { dae with bindings = bindings, eqns = eqns }
 
+  sem daeJacADExpr : Name -> Name -> Expr -> Expr
+  sem daeJacADExpr y yp =| t ->
+    recursive let inner = lam t.
+      match t with
+        TmApp (appr1 & {
+          lhs = TmApp (appr2 & {lhs = TmConst {val = CGet _}, rhs = TmVar r}),
+          rhs = TmConst {val = CInt {val = i }},
+          info = info
+        })
+      then
+        let b = peadAstBuilder info in
+        if or (nameEq r.ident y) (nameEq r.ident yp) then
+          let ident = daeID (if nameEq r.ident y then y else yp, 1) in
+          let tp = TmApp {
+            appr1 with
+            lhs = TmApp { appr2 with rhs = TmVar { r with ident = ident }}}
+          in
+          b.dualnum t tp
+        else t
+      else smap_Expr_Expr inner t
+    in
+    inner (ad 1 t)
+
   type DAEFirstOrderState = {
     ys : [These (Name, Int) (Name, Int)],
     indexMap : Map (Name, Int) (These Int Int)
@@ -190,12 +213,17 @@ lang DAE = DAEAst + MExprFreeVars
       { dae with vars = vars, eqns = concat dae.eqns eqns }
     else error "impossible"
 
+  sem _daeErrMsg : String -> String -> Expr -> String
+  sem _daeErrMsg fname msg =| t ->
+    strJoin "\n" [strJoin ":" [fname, msg], expr2str t]
+
   sem daeGenInitExpr : DAEFirstOrderState -> TmDAERec -> Expr
   sem daeGenInitExpr state =| dae ->
-    let errMsg = lam t.
-      strJoin "\n" ["daeGenInitExpr: Malformed initial equation:", expr2str t]
-    in
-    match dae.vars with [(y, _), (yp, _)] then
+    let errMsg = _daeErrMsg "daeGenInitExpr" in
+    match dae.vars with
+      [(y, TySeq {ty = TyFloat _}), (yp, TySeq {ty = TyFloat _})]
+    then
+      let errMsg = errMsg "Malformed initial equations" in
       -- Construct assignments from the inital equations
       let updateAssignment = lam i. lam ts1.
         mapUpdate i
@@ -223,7 +251,7 @@ lang DAE = DAEAst + MExprFreeVars
                   lhs = TmConst {val = CSubf _},
                   rhs = TmApp {
                     lhs = TmApp {lhs = TmConst {val = CGet _}, rhs = TmVar r},
-                    rhs = TmConst {val = CInt {val = i }}
+                    rhs = TmConst {val = CInt {val = i}}
                   }
                 },
                 rhs = t
@@ -305,7 +333,8 @@ lang DAE = DAEAst + MExprFreeVars
       in
       match unzip initTms with (y0, yp0) in
       bind_ dae.bindings (utuple_ [seq_ y0, seq_ yp0])
-    else error "daeGenInitExpr: Not a first-order DAE"
+    else
+      error (errMsg "Not a first-order DAE" (TmDAE dae))
 
   sem daeGenOutExpr : TmDAERec -> Expr
   sem daeGenOutExpr =| dae ->
@@ -345,6 +374,209 @@ lang DAE = DAEAst + MExprFreeVars
   sem daeGenResExpr : TmDAERec -> Expr
   sem daeGenResExpr =| dae ->
     bind_ dae.bindings (nlams_ dae.vars (seq_ dae.eqns))
+
+  sem daeJacStructure : TmDAERec -> ([[Int]], [[Int]])
+  sem daeJacStructure =| dae ->
+    let errMsg = _daeErrMsg "daeJacYStructure" in
+    match dae.vars with
+      [(y, TySeq {ty = TyFloat _}), (yp, TySeq {ty = TyFloat _})]
+    then
+      recursive let inner = lam ident. lam acc. lam t.
+        match t with
+          TmApp {
+            lhs = TmApp {lhs = TmConst {val = CGet _}, rhs = TmVar r},
+            rhs = TmConst {val = CInt {val = i}}
+          }
+        then
+          if nameEq ident r.ident then setInsert i acc else acc
+        else sfold_Expr_Expr (inner ident) acc t
+      in
+      let f = lam ident. lam eqn.
+        setToSeq (inner ident (setEmpty subi) eqn)
+      in
+      (map (f y) dae.eqns, map (f yp) dae.eqns)
+    else
+      error (errMsg "Not a first-order DAE" (TmDAE dae))
+
+  sem daeJacStructureToIdxSeq : [[Int]] -> [(Int, [Int])]
+  sem daeJacStructureToIdxSeq =| structure ->
+    let js = create (length structure) (lam j. j) in
+    let is = mapi (lam i. lam eqn. (i, setOfSeq subi eqn)) structure in
+    foldl
+      (lam acc. lam j.
+        switch map (lam i. i.0) (filter (lam i. setMem j i.1) is)
+        case [] then acc
+        case is then snoc acc (j, is)
+        end)
+      [] js
+
+  sem daeGenJacY : TmDAERec -> Expr
+  sem daeGenJacY =| dae -> _daeGenJac true dae
+
+  sem daeGenJacYp : TmDAERec -> Expr
+  sem daeGenJacYp =| dae -> _daeGenJac false dae
+
+  sem _daeGenJac : Bool -> TmDAERec -> Expr
+  sem _daeGenJac jacY =| dae ->
+    let errMsg = _daeErrMsg "daeGenJacY" in
+    match dae.vars with
+      [(y, TySeq {ty = TyFloat _}), (yp, TySeq {ty = TyFloat _})]
+    then
+      match (if jacY then (y, yp) else (yp, y)) with (y, yp) in
+            let n = length dae.eqns in
+            let _r = nameSym "r" in
+            let _idxs = nameSym "idxs" in
+            let _jis = nameSym "jis" in
+            let _j = tupleproj_ 0 (nvar_ _jis) in
+            let _is = tupleproj_ 1 (nvar_ _jis) in
+            let _i = nameSym "i" in
+            let _acc1 = nameSym "acc" in
+            let _acc2 = nameSym "acc" in
+            let daeJacADExpr = daeJacADExpr y yp in
+            let t = bindall_ [
+              nulet_ (daeID (yp, 1)) (seq_ (create n (lam. float_ 0.))),
+              nlams_ (cons (_idxs, tyseq_ (tyseq_ tyint_)) dae.vars)
+                (bind_
+                   (nulet_ _r
+                      (seq_
+                         (map
+                            (lam eqn.
+                              nulam_ (daeID (y, 1))
+                                (tupleproj_ 1 (daeJacADExpr eqn)))
+                            dae.eqns)))
+                   (foldl_
+                      (nulams_ [_acc1, _jis]
+                         (bind_
+                            (nulet_ (daeID (y, 1))
+                               (appSeq_ (uconst_ (COnehot ())) [int_ n, _j]))
+                            (foldl_
+                               (nulams_ [_acc2, _i]
+                                  (cons_
+                                     (utuple_ [
+                                       utuple_ [nvar_ _i, _j],
+                                       app_
+                                         (get_ (nvar_ _r) (nvar_ _i))
+                                         (nvar_ (daeID (y, 1)))
+                                     ])
+                                     (nvar_ _acc2)))
+                               (nvar_ _acc1)
+                               _is)))
+                      (seq_ [])
+                      (nvar_ _idxs)))
+            ] in
+            bind_ (daeJacADExpr dae.bindings) t
+    else
+      error (errMsg "Not a first-order DAE" (TmDAE dae))
+
+  sem _daeGenMixedJac : Bool -> Float -> TmDAERec -> Expr
+  sem _daeGenMixedJac jacY phi =| dae ->
+    let errMsg = _daeErrMsg "daeGenMixedJac" in
+    let logDebug = lam msg.
+      logMsg logLevel.debug
+        (lam.
+          strJoin "\n" [
+            join ["daeGenMixedJac", if jacY then "Y" else "Yp"],
+            msg ()
+          ])
+    in
+    if or (ltf phi 0.) (gtf phi 1.) then
+      error
+        (join ["daeGenMixedJac:phi = ", float2string phi, " is outside [0, 1]"])
+    else
+      match dae.vars with
+        [(y, TySeq {ty = TyFloat _}), (yp, TySeq {ty = TyFloat _})]
+      then
+        let y = nameSetNewSym y in
+        let yp = nameSetNewSym yp in
+        let n = length dae.eqns in
+        let _jacc = nameSym "jacc" in
+        let _idxs = nameSym "idxs" in
+        let indxs =
+          let s = daeJacStructure dae in
+          let s = if jacY then s.0 else  s.1 in
+          daeJacStructureToIdxSeq s
+        in
+        let t = _daeGenJac jacY dae in
+        let idxs = lam idxs.
+          seq_ (map (lam jis. utuple_ [int_ jis.0, seq_ (map int_ jis.1)]) idxs)
+        in
+        switch
+          match
+            partition
+              (lam jis. leqf (int2float (length jis.1)) (mulf phi (int2float n)))
+              indxs
+            with (specIdxs, adIdxs)
+          in
+          logDebug (lam.
+            strJoin " " [int2string (length adIdxs), "AD derivatives"]);
+          logDebug (lam.
+            strJoin " "
+              [int2string (length specIdxs), "specialized partial derivatives"]);
+          (specIdxs, adIdxs)
+        case (specIdxs, []) then
+          app_
+            (foldLets
+               (peval
+                  (nulams_ [_idxs, y, yp]
+                     (bind_ (nulet_ _jacc t)
+                        (seq_
+                           (let args = [nvar_ y, nvar_ yp] in [
+                             seq_ [],
+                             appSeq_ (nvar_ _jacc) (cons (idxs specIdxs) args)
+                           ]))))))
+            (idxs adIdxs)
+        case (specIdxs, adIdxs) then
+          app_
+            (foldLets
+               (peval
+                  (nulams_ [_idxs, y, yp]
+                     (bind_ (nulet_ _jacc t)
+                        (seq_
+                           (let args = [nvar_ y, nvar_ yp] in [
+                             appSeq_ (nvar_ _jacc) (cons (nvar_ _idxs) args),
+                             appSeq_ (nvar_ _jacc) (cons (idxs specIdxs) args)
+                           ]))))))
+            (idxs adIdxs)
+        end
+      else
+        error (errMsg "Not a first-order DAE" (TmDAE dae))
+
+  sem daeGenMixedJacY : Float -> TmDAERec -> Expr
+  sem daeGenMixedJacY phi =| dae -> _daeGenMixedJac true phi dae
+
+  sem daeGenMixedJacYp : Float -> TmDAERec -> Expr
+  sem daeGenMixedJacYp phi =| dae -> _daeGenMixedJac false phi dae
+
+  sem foldLets : Expr -> Expr
+  sem foldLets =| t ->
+    match analyseLets (mapEmpty nameCmp, mapEmpty nameCmp) t with (_, subs) in
+    recursive let inner = lam t.
+      switch t
+      case TmVar r then
+        optionMapOr t inner (mapLookup r.ident subs)
+      case TmLet r then
+        if optionIsSome (mapLookup r.ident subs) then
+          inner r.inexpr
+        else smap_Expr_Expr inner t
+      case t then
+        smap_Expr_Expr inner t
+      end
+    in
+    inner t
+
+  sem analyseLets
+    : (Map Name Int, Map Name Expr) -> Expr -> (Map Name Int, Map Name Expr)
+  sem analyseLets acc =
+  | TmVar r ->
+    (mapUpdate r.ident
+       (optionMapOr (Some 1) (lam count. Some (succ count))) acc.0,
+     acc.1)
+  | TmLet r ->
+    match acc with (count, subs) in
+    if lti (optionGetOr 0 (mapLookup r.ident count)) 2 then
+      (count, mapInsert r.ident r.body subs)
+    else acc
+  | t -> sfold_Expr_Expr analyseLets acc t
 end
 
 lang TestLang = DAE + DAEParseAnalysis + DAEParseDesugar + MExprConstantFold end
@@ -377,6 +609,7 @@ in
 
 let _prepDVar = lam x. (nameGetStr x.0, x.1) in
 let _prepDVars = lam vars. map _prepDVar (sort dvarCmp vars) in
+-- let peval = pevalExpr { pevalCtxEmpty () with subsSingleLets = true } in
 
 -------------------
 -- Input program --
@@ -700,7 +933,7 @@ let expected = _parseExpr "
  [ 2., 0., 0., negf 1., 0. ])
   "
 in
-let actual = constantfold (peval iexpr) in
+let actual = constantfoldLite (peval iexpr) in
 -- utest expected with actual using eqExpr in
 -- OK, utest fails due to float comparsions.
 logSetLogLevel logLevel.error;
@@ -719,33 +952,286 @@ lam y: [Float]. lam yp: [Float].
   t5
   "
 in
-let actual = constantfold (peval oexpr) in
+let actual = constantfoldLite (peval oexpr) in
 utest expected with actual using eqExpr in
 
 let expected = _parseExpr "
-lam y. lam yp.
-  let t = get yp 1 in
-  let t1 = get y 1 in
-  let t2 = get y 0 in
-  let t3 = get yp 3 in
-  let t4 = get y 3 in
-  let t5 = get y 2 in [
-    subf (get yp 1) (mulf (get y 0) (get y 4)),
-    subf (get yp 3) (subf (mulf (get y 2) (get y 4)) 1.),
-    addf
-      (addf
-         (addf (mulf t2 t) (mulf 2. (mulf t1 t1)))
-         (mulf t t2))
-      (addf
-         (addf (mulf t5 t3) (mulf 2. (mulf t4 t4)))
-         (mulf t3 t5)),
-    subf (get y 1) (get yp 0),
-    subf (get y 3) (get yp 2)
-  ]
+lam y. lam yp. [
+  subf (get yp 1) (mulf (get y 0) (get y 4)),
+  subf (get yp 3) (subf (mulf (get y 2) (get y 4)) 1.),
+  addf
+    (addf
+       (addf (mulf (get y 0) (get yp 1)) (mulf 2. (mulf (get y 1) (get y 1))))
+       (mulf (get yp 1) (get y 0)))
+    (addf
+       (addf (mulf (get y 2) (get yp 3)) (mulf 2. (mulf (get y 3) (get y 3))))
+       (mulf (get yp 3) (get y 2))),
+  subf (get y 1) (get yp 0),
+  subf (get y 3) (get yp 2)
+]
   "
 in
-let actual = constantfold (peval rexpr) in
+let actual = constantfoldLite (peval rexpr) in
 utest expected with actual using eqExpr in
 
+---------------------------
+-- Test: daeJacStructure --
+---------------------------
+
+let expected = (
+  [
+    [0, 4],                     -- x, h
+    [2, 4],                     -- y, h
+    [0, 1, 2, 3],               -- x, x', y, y'
+    [1],                        -- x'
+    [3]                         -- y'
+  ], [
+    [1],                        -- x''
+    [3],                        -- y''
+    [1, 3],                     -- x'', y''
+    [0],                        -- x'
+    [2]                         -- y'
+  ])
+in
+let actual = daeJacStructure daer in
+let jstructure = actual in
+utest expected with actual in
+
+-----------------------------------
+-- Test: daeJacStructureToIdxSeq --
+-----------------------------------
+
+let expected = (
+  [
+    (0, [0, 2]),
+    (1, [2, 3]),
+    (2, [1, 2]),
+    (3, [2, 4]),
+    (4, [0, 1])
+  ], [
+    (0, [3]),
+    (1, [0, 2]),
+    (2, [4]),
+    (3, [1, 2])
+  ])
+in
+let actual =
+  (daeJacStructureToIdxSeq jstructure.0,
+   daeJacStructureToIdxSeq jstructure.1)
+in
+utest expected with actual in
+
+----------------------
+-- Test: daeGenJacY --
+----------------------
+
+let expected = _parseExpr "
+lam idxs. lam y. lam yp.
+  foldl
+    (lam acc. lam jis.
+      (foldl
+         (lam acc. lam i.
+           cons
+             ((i, jis.0),
+              get [
+                lam dy.
+                  negf
+                    (addf
+                       (mulf (get y 0) (get dy 4))
+                       (mulf (get dy 0) (get y 4))),
+                lam dy.
+                  negf
+                    (addf
+                       (mulf (get y 2) (get dy 4))
+                       (mulf (get dy 2) (get y 4))),
+                lam dy.
+                  addf
+                    (addf
+                       (addf
+                          (mulf (get dy 0) (get yp 1))
+                          (mulf 2.
+                             (addf
+                                (mulf (get y 1) (get dy 1))
+                                (mulf (get dy 1) (get y 1)))))
+                       (mulf (get yp 1) (get dy 0)))
+                    (addf
+                       (addf
+                          (mulf (get dy 2) (get yp 3))
+                          (mulf 2.
+                             (addf
+                                (mulf (get y 3) (get dy 3))
+                                (mulf (get dy 3) (get y 3)))))
+                       (mulf (get yp 3) (get dy 2))),
+                lam dy. get dy 1,
+                lam dy. get dy 3
+              ]
+                i
+                (onehot 5 jis.0))
+             acc)
+         acc
+         jis.1))
+    []
+    idxs
+  "
+in
+let actual = constantfoldLite (peval (daeGenJacY daer)) in
+utest expected with actual using eqExpr in
+
+----------------------------------------------
+-- Test: Specialize all partial derivatives --
+----------------------------------------------
+
+let idxs =
+  seq_
+    (map
+       (lam jis. utuple_ [int_ jis.0, seq_ (map int_ jis.1)])
+       [
+         (0, [0, 1, 2, 3, 4]),
+         (1, [0, 1, 2, 3, 4]),
+         (2, [0, 1, 2, 3, 4]),
+         (3, [0, 1, 2, 3, 4]),
+         (4, [0, 1, 2, 3, 4])
+       ])
+in
+let expected = _parseExpr "
+lam y. lam yp. [
+  ((4, 4), 0.),
+  ((3, 4), 0.),
+  ((2, 4), 0.),
+  ((1, 4), negf (get y 2)),
+  ((0, 4), negf (get y 0)),
+  ((4, 3), 1.),
+  ((3, 3), 0.),
+  ((2, 3), mulf 2. (addf (get y 3) (get y 3))),
+  ((1, 3), 0.),
+  ((0, 3), 0.),
+  ((4, 2), 0.),
+  ((3, 2), 0.),
+  ((2, 2), addf (get yp 3) (get yp 3)),
+  ((1, 2), negf (get y 4)),
+  ((0, 2), 0.),
+  ((4, 1), 0.),
+  ((3, 1), 1.),
+  ((2, 1), mulf 2. (addf (get y 1) (get y 1))),
+  ((1, 1), 0.),
+  ((0, 1), 0.),
+  ((4, 0), 0.),
+  ((3, 0), 0.),
+  ((2, 0), addf (get yp 1) (get yp 1)),
+  ((1, 0), 0.),
+  ((0, 0), negf (get y 4))
+]
+  "
+in
+let actual =
+  constantfoldLite (peval (app_ (daeGenJacY daer) idxs))
+in
+utest expected with actual using eqExpr in
+
+----------------------------------------------
+-- Test: Specialize all partial derivatives --
+----------------------------------------------
+
+let expected = _parseExpr "
+lam y.
+  lam yp.
+    [ ((4, 4), 0.),
+      ((3, 4), 0.),
+      ((2, 4), 0.),
+      ((1, 4), 0.),
+      ((0, 4), 0.),
+      ((4, 3), 0.),
+      ((3, 3), 0.),
+      ((2, 3), addf
+        (get
+           y
+           2)
+        (get
+           y
+           2)),
+      ((1, 3), 1.),
+      ((0, 3), 0.),
+      ((4, 2), negf
+        1.),
+      ((3, 2), 0.),
+      ((2, 2), 0.),
+      ((1, 2), 0.),
+      ((0, 2), 0.),
+      ((4, 1), 0.),
+      ((3, 1), 0.),
+      ((2, 1), addf
+        (get
+           y
+           0)
+        (get
+           y
+           0)),
+      ((1, 1), 0.),
+      ((0, 1), 1.),
+      ((4, 0), 0.),
+      ((3, 0), negf
+        1.),
+      ((2, 0), 0.),
+      ((1, 0), 0.),
+      ((0, 0), 0.) ]
+  "
+in
+let actual =
+  peval (app_ (daeGenJacYp daer) idxs)
+in
+-- utest expected with actual using eqExpr in -- Diabled due to float comparisons
+logSetLogLevel logLevel.error;
+logMsg logLevel.debug (lam. strJoin "\n" ["jacYp expected:", expr2str expected]);
+logMsg logLevel.debug (lam. strJoin "\n" ["jacYp actual:", expr2str actual]);
+logSetLogLevel logLevel.error;
+
+---------------------------
+-- Test: daeGenMixedJacY --
+---------------------------
+
+let expected = _parseExpr "
+lam y. lam yp. [
+  foldl
+    (lam acc. lam jis.
+      foldl
+        (lam acc1. lam i.
+          cons
+            ((i, jis.0)
+            ,get [
+              lam dyp. get dyp 1,
+              lam dyp. get dyp 3,
+              lam dyp. addf
+                       (addf
+                          (mulf (get y 0) (get dyp 1))
+                          (mulf (get dyp 1) (get y 0)))
+                       (addf
+                          (mulf (get y 2) (get dyp 3))
+                          (mulf (get dyp 3) (get y 2))),
+              lam dyp. negf (get dyp 0),
+              lam dyp. negf (get dyp 2)
+            ]
+               i
+               (onehot 5 jis.0))
+            acc1)
+        acc
+        jis.1)
+        []
+    [
+      (1, [ 0, 2 ]),
+      (3, [ 1, 2 ])
+    ],
+  [
+    ((4, 2), (negf 1.)),
+    ((3, 0), (negf 1.))
+  ]
+]
+  "
+in
+let actual = daeGenMixedJacYp 0.3 daer in
+-- utest expected with actual using eqExpr in -- Diabled due to float comparisons
+logSetLogLevel logLevel.debug;
+logMsg logLevel.debug (lam. strJoin "\n" ["jacMixedY expected:", expr2str expected]);
+logMsg logLevel.debug (lam. strJoin "\n" ["jacMixedY actual:", expr2str actual]);
+logSetLogLevel logLevel.error;
 
 ()
