@@ -422,49 +422,57 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold
     match dae.vars with
       [(y, TySeq {ty = TyFloat _}), (yp, TySeq {ty = TyFloat _})]
     then
-      match (if jacY then (y, yp) else (yp, y)) with (y, yp) in
-            let n = length dae.eqns in
-            let _r = nameSym "r" in
-            let _idxs = nameSym "idxs" in
-            let _jis = nameSym "jis" in
-            let _j = tupleproj_ 0 (nvar_ _jis) in
-            let _is = tupleproj_ 1 (nvar_ _jis) in
-            let _i = nameSym "i" in
-            let _acc1 = nameSym "acc" in
-            let _acc2 = nameSym "acc" in
-            let daeJacADExpr = daeJacADExpr y yp in
-            let t = bindall_ [
-              nulet_ (daeID (yp, 1)) (seq_ (create n (lam. float_ 0.))),
-              nlams_ (cons (_idxs, tyseq_ (tyseq_ tyint_)) dae.vars)
-                (bind_
-                   (nulet_ _r
-                      (seq_
-                         (map
-                            (lam eqn.
-                              nulam_ (daeID (y, 1))
-                                (tupleproj_ 1 (daeJacADExpr eqn)))
-                            dae.eqns)))
-                   (foldl_
-                      (nulams_ [_acc1, _jis]
-                         (bind_
-                            (nulet_ (daeID (y, 1))
-                               (appSeq_ (uconst_ (COnehot ())) [int_ n, _j]))
-                            (foldl_
-                               (nulams_ [_acc2, _i]
-                                  (cons_
-                                     (utuple_ [
-                                       utuple_ [nvar_ _i, _j],
-                                       app_
-                                         (get_ (nvar_ _r) (nvar_ _i))
-                                         (nvar_ (daeID (y, 1)))
-                                     ])
-                                     (nvar_ _acc2)))
-                               (nvar_ _acc1)
-                               _is)))
-                      (seq_ [])
-                      (nvar_ _idxs)))
-            ] in
-            bind_ (daeJacADExpr dae.bindings) t
+      match
+        (if jacY then (y, yp) else (yp, y)) with (y, yp)
+        in
+        let n = length dae.eqns in
+        let _r = nameSym "r" in
+        let _idxs = nameSym "idxs" in
+        let _jis = nameSym "jis" in
+        let _j = tupleproj_ 0 (nvar_ _jis) in
+        let _is = tupleproj_ 1 (nvar_ _jis) in
+        let _i = nameSym "i" in
+        let _acc1 = nameSym "acc" in
+        let _acc2 = nameSym "acc" in
+        let daeJacADExpr = daeJacADExpr y yp in
+        let t = bindall_ [
+          nulet_ (daeID (yp, 1)) (seq_ (create n (lam. float_ 0.))),
+          nulams_ (cons _idxs (unzip dae.vars).0)
+            (bind_
+               (nulet_ _r
+                  (seq_
+                     (map
+                        (lam eqn.
+                          -- NOTE(oerikss, 2023-07-03): We but each partial
+                          -- derivative in a thunk to prevent the OCaml compiler
+                          -- from trying to fit all of them in a single
+                          -- stack-frame as this will make the OCaml compiler
+                          -- fail when we have many large partial derivative
+                          -- expressions.
+                          nulams_ [daeID (y, 1), nameSym ""]
+                            (tupleproj_ 1 (daeJacADExpr eqn)))
+                        dae.eqns)))
+               (foldl_
+                  (nulams_ [_acc1, _jis]
+                     (bind_
+                        (nulet_ (daeID (y, 1))
+                           (appSeq_ (uconst_ (COnehot ())) [int_ n, _j]))
+                        (foldl_
+                           (nulams_ [_acc2, _i]
+                              (cons_
+                                 (utuple_ [
+                                   utuple_ [nvar_ _i, _j],
+                                   app_
+                                     (get_ (nvar_ _r) (nvar_ _i))
+                                     (nvar_ (daeID (y, 1)))
+                                 ])
+                                 (nvar_ _acc2)))
+                           (nvar_ _acc1)
+                           _is)))
+                  (seq_ [])
+                  (nvar_ _idxs)))
+        ] in
+        bind_ (daeJacADExpr dae.bindings) t
     else
       error (errMsg "Not a first-order DAE" (TmDAE dae))
 
@@ -513,26 +521,27 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold
             strJoin " "
               [int2string (length specIdxs), "specialized partial derivatives"]);
           (specIdxs, adIdxs)
-        case (specIdxs, []) then
-          app_
-            (foldLets
-               (peval
-                  (nulams_ [_idxs, y, yp]
-                     (bind_ (nulet_ _jacc t)
-                        (seq_
-                           (let args = [nvar_ y, nvar_ yp] in [
-                             seq_ [],
-                             appSeq_ (nvar_ _jacc) (cons (idxs specIdxs) args)
-                           ]))))))
-            (idxs adIdxs)
+        -- case (specIdxs, []) then
+        --   app_
+        --     (foldLets
+        --        (peval
+        --           (nulams_ [_idxs]
+        --              (bind_ (nulet_ _jacc t)
+        --                 (seq_
+        --                    (let args = [] in [
+        --                      seq_ [],
+        --                      appSeq_ (nvar_ _jacc) (cons (idxs specIdxs) args)
+        --                    ]))))))
+        --     (idxs adIdxs)
         case (specIdxs, adIdxs) then
           app_
             (foldLets
                (peval
-                  (nulams_ [_idxs, y, yp]
+                  (let yyp = (unzip dae.vars).0 in
+                   nulams_ (cons _idxs yyp)
                      (bind_ (nulet_ _jacc t)
                         (seq_
-                           (let args = [nvar_ y, nvar_ yp] in [
+                           (let args = map nvar_ yyp in [
                              appSeq_ (nvar_ _jacc) (cons (nvar_ _idxs) args),
                              appSeq_ (nvar_ _jacc) (cons (idxs specIdxs) args)
                            ]))))))
@@ -1034,17 +1043,17 @@ lam idxs. lam y. lam yp.
            cons
              ((i, jis.0),
               get [
-                lam dy.
+                lam dy. lam.
                   negf
                     (addf
                        (mulf (get y 0) (get dy 4))
                        (mulf (get dy 0) (get y 4))),
-                lam dy.
+                lam dy. lam.
                   negf
                     (addf
                        (mulf (get y 2) (get dy 4))
                        (mulf (get dy 2) (get y 4))),
-                lam dy.
+                lam dy. lam.
                   addf
                     (addf
                        (addf
@@ -1062,8 +1071,8 @@ lam idxs. lam y. lam yp.
                                 (mulf (get y 3) (get dy 3))
                                 (mulf (get dy 3) (get y 3)))))
                        (mulf (get yp 3) (get dy 2))),
-                lam dy. get dy 1,
-                lam dy. get dy 3
+                lam dy. lam. get dy 1,
+                lam dy. lam. get dy 3
               ]
                 i
                 (onehot 5 jis.0))
@@ -1095,31 +1104,31 @@ let idxs =
 in
 let expected = _parseExpr "
 lam y. lam yp. [
-  ((4, 4), 0.),
-  ((3, 4), 0.),
-  ((2, 4), 0.),
-  ((1, 4), negf (get y 2)),
-  ((0, 4), negf (get y 0)),
-  ((4, 3), 1.),
-  ((3, 3), 0.),
-  ((2, 3), mulf 2. (addf (get y 3) (get y 3))),
-  ((1, 3), 0.),
-  ((0, 3), 0.),
-  ((4, 2), 0.),
-  ((3, 2), 0.),
-  ((2, 2), addf (get yp 3) (get yp 3)),
-  ((1, 2), negf (get y 4)),
-  ((0, 2), 0.),
-  ((4, 1), 0.),
-  ((3, 1), 1.),
-  ((2, 1), mulf 2. (addf (get y 1) (get y 1))),
-  ((1, 1), 0.),
-  ((0, 1), 0.),
-  ((4, 0), 0.),
-  ((3, 0), 0.),
-  ((2, 0), addf (get yp 1) (get yp 1)),
-  ((1, 0), 0.),
-  ((0, 0), negf (get y 4))
+  ((4, 4), lam. 0.),
+  ((3, 4), lam. 0.),
+  ((2, 4), lam. 0.),
+  ((1, 4), lam. negf (get y 2)),
+  ((0, 4), lam. negf (get y 0)),
+  ((4, 3), lam. 1.),
+  ((3, 3), lam. 0.),
+  ((2, 3), lam. mulf 2. (addf (get y 3) (get y 3))),
+  ((1, 3), lam. 0.),
+  ((0, 3), lam. 0.),
+  ((4, 2), lam. 0.),
+  ((3, 2), lam. 0.),
+  ((2, 2), lam. addf (get yp 3) (get yp 3)),
+  ((1, 2), lam. negf (get y 4)),
+  ((0, 2), lam. 0.),
+  ((4, 1), lam. 0.),
+  ((3, 1), lam. 1.),
+  ((2, 1), lam. mulf 2. (addf (get y 1) (get y 1))),
+  ((1, 1), lam. 0.),
+  ((0, 1), lam. 0.),
+  ((4, 0), lam. 0.),
+  ((3, 0), lam. 0.),
+  ((2, 0), lam. addf (get yp 1) (get yp 1)),
+  ((1, 0), lam. 0.),
+  ((0, 0), lam. negf (get y 4))
 ]
   "
 in
@@ -1135,45 +1144,45 @@ utest expected with actual using eqExpr in
 let expected = _parseExpr "
 lam y.
   lam yp.
-    [ ((4, 4), 0.),
-      ((3, 4), 0.),
-      ((2, 4), 0.),
-      ((1, 4), 0.),
-      ((0, 4), 0.),
-      ((4, 3), 0.),
-      ((3, 3), 0.),
-      ((2, 3), addf
+    [ ((4, 4), lam. 0.),
+      ((3, 4), lam. 0.),
+      ((2, 4), lam. 0.),
+      ((1, 4), lam. 0.),
+      ((0, 4), lam. 0.),
+      ((4, 3), lam. 0.),
+      ((3, 3), lam. 0.),
+      ((2, 3), lam. addf
         (get
            y
            2)
         (get
            y
            2)),
-      ((1, 3), 1.),
-      ((0, 3), 0.),
-      ((4, 2), negf
+      ((1, 3), lam. 1.),
+      ((0, 3), lam. 0.),
+      ((4, 2), lam. negf
         1.),
-      ((3, 2), 0.),
-      ((2, 2), 0.),
-      ((1, 2), 0.),
-      ((0, 2), 0.),
-      ((4, 1), 0.),
-      ((3, 1), 0.),
-      ((2, 1), addf
+      ((3, 2), lam. 0.),
+      ((2, 2), lam. 0.),
+      ((1, 2), lam. 0.),
+      ((0, 2), lam. 0.),
+      ((4, 1), lam. 0.),
+      ((3, 1), lam. 0.),
+      ((2, 1), lam. addf
         (get
            y
            0)
         (get
            y
            0)),
-      ((1, 1), 0.),
-      ((0, 1), 1.),
-      ((4, 0), 0.),
-      ((3, 0), negf
+      ((1, 1), lam. 0.),
+      ((0, 1), lam. 1.),
+      ((4, 0), lam. 0.),
+      ((3, 0), lam. negf
         1.),
-      ((2, 0), 0.),
-      ((1, 0), 0.),
-      ((0, 0), 0.) ]
+      ((2, 0), lam. 0.),
+      ((1, 0), lam. 0.),
+      ((0, 0), lam. 0.) ]
   "
 in
 let actual =
@@ -1198,17 +1207,17 @@ lam y. lam yp. [
           cons
             ((i, jis.0)
             ,get [
-              lam dyp. get dyp 1,
-              lam dyp. get dyp 3,
-              lam dyp. addf
+              lam dyp. lam. get dyp 1,
+              lam dyp. lam. get dyp 3,
+              lam dyp. lam. addf
                        (addf
                           (mulf (get y 0) (get dyp 1))
                           (mulf (get dyp 1) (get y 0)))
                        (addf
                           (mulf (get y 2) (get dyp 3))
                           (mulf (get dyp 3) (get y 2))),
-              lam dyp. negf (get dyp 0),
-              lam dyp. negf (get dyp 2)
+              lam dyp. lam. negf (get dyp 0),
+              lam dyp. lam. negf (get dyp 2)
             ]
                i
                (onehot 5 jis.0))
@@ -1221,15 +1230,15 @@ lam y. lam yp. [
       (3, [ 1, 2 ])
     ],
   [
-    ((4, 2), (negf 1.)),
-    ((3, 0), (negf 1.))
+    ((4, 2), lam. negf 1.),
+    ((3, 0), lam. negf 1.)
   ]
 ]
   "
 in
 let actual = daeGenMixedJacYp 0.3 daer in
 -- utest expected with actual using eqExpr in -- Diabled due to float comparisons
-logSetLogLevel logLevel.debug;
+logSetLogLevel logLevel.error;
 logMsg logLevel.debug (lam. strJoin "\n" ["jacMixedY expected:", expr2str expected]);
 logMsg logLevel.debug (lam. strJoin "\n" ["jacMixedY actual:", expr2str actual]);
 logSetLogLevel logLevel.error;

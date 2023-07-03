@@ -39,7 +39,7 @@ let errorExit = lam. print (usage ()); print "\n"; exit 1
 
 type DAEInit = ([Float], [Float])
 type DAEResf = [Float] -> [Float] -> [Float]
-type DAEJacVals = [((Int, Int), Float)]
+type DAEJacVals = [((Int, Int), () -> Float)]
 type DAEJacf = [Float] -> [Float] -> [DAEJacVals]
 type DAEOutf = [Float] -> [Float] -> ()
 
@@ -88,16 +88,18 @@ let daeRuntimeRun
           let yp = create n (vget jacargs.yp) in
           let m = sundialsMatrixDenseUnwrap m in
           iter
-            (iter (lam ijv.
-              match ijv with ((i, j), v) in
-              -- m is in column-major format
-              mset m j i v))
+            (iter
+                (lam ijf.
+                  match ijf with ((i, j), f) in
+                  -- m is in column-major format
+                  mset m j i (f ())))
             (jacYf y yp);
           iter
-            (iter (lam ijv.
-              match ijv with ((i, j), v) in
-              -- m is in column-major format
-              mset m j i (addf (mget m j i) (mulf jacargs.c v))))
+            (iter
+                (lam ijf.
+                  match ijf with ((i, j), f) in
+                  -- m is in column-major format
+                  mset m j i (addf (mget m j i) (mulf jacargs.c (f ())))))
             (jacYpf y yp);
           ()
         in
