@@ -20,6 +20,9 @@ infix right Arrow: DAEType = "->"
 
 -- Constants
 prod Float: DAEConst = val:Float
+prod Int: DAEConst = val:Int
+prod True: DAEConst = "true"
+prod False: DAEConst = "false"
 
 -- Patterns
 prod TupleDAEPat: DAEPat = "{" (names:LName ("," names:LName)*)? "}"
@@ -35,6 +38,7 @@ infix left Add: DAEExpr = "+"
 infix left Sub: DAEExpr = "-"
 infix left Mul: DAEExpr = "*"
 infix left Div: DAEExpr = "/"
+infix left Lt: DAEExpr = "<"
 prod MatchIn: DAEExpr =
   "match" target:DAEExpr "with" pat:DAEPat "in" body:DAEExpr
 prod Let: DAEExpr = "let" name:LName "=" arg:DAEExpr "in" body:DAEExpr
@@ -68,6 +72,7 @@ precedence {
   App;
   Mul Div;
   Add Sub;
+  Lt;
   Abs;
 }
 

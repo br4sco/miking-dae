@@ -20,6 +20,9 @@ lang DAEParseDesugar = DAEAst
   sem daeDesugarConst : DAEConst -> Const
   sem daeDesugarConst =
   | FloatDAEConst r -> CFloat { val = r.val.v }
+  | IntDAEConst r -> CInt { val = r.val.v }
+  | TrueDAEConst _ -> CBool { val = true }
+  | FalseDAEConst _ -> CBool { val = false }
 
   sem daeDesugarPat : DAEPat -> Pat
   sem daeDesugarPat =
@@ -121,6 +124,7 @@ lang DAEParseDesugar = DAEAst
   | SubDAEExpr r -> daeDesugarBinOp r.info (CSubf ()) (r.left, r.right)
   | MulDAEExpr r -> daeDesugarBinOp r.info (CMulf ()) (r.left, r.right)
   | DivDAEExpr r -> daeDesugarBinOp r.info (CDivf ()) (r.left, r.right)
+  | LtDAEExpr r -> daeDesugarBinOp r.info (CLti ()) (r.left, r.right)
   | MatchInDAEExpr r ->
     let ty = TyUnknown { info = r.info } in
     TmMatch {
@@ -331,6 +335,13 @@ lang DAEParseDesugar = DAEAst
   sem daeResugarConst info =
   | CFloat r ->
     Some (FloatDAEConst { val = { i = info, v = r.val }, info = info })
+  | CInt r ->
+    Some (IntDAEConst { val = { i = info, v = r.val }, info = info })
+  | CBool r ->
+    if r.val then
+      Some (TrueDAEConst { info = info })
+    else
+      Some (FalseDAEConst { info = info })
   | _ -> None ()
 
   sem daeResugarPat : Pat -> Option DAEPat
