@@ -5,6 +5,7 @@ include "log.mc"
 include "mexpr/ast-builder.mc"
 include "mexpr/utils.mc"
 include "mexpr/symbolize.mc"
+include "mexpr/cse.mc"
 
 include "./dae.mc"
 include "./desugar.mc"

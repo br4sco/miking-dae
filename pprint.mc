@@ -162,10 +162,13 @@ end
 
 
 lang DAEConstPrettyPrint = DAEParsePrettyPrintBase +
-  FloatDAEConstAst
+  FloatDAEConstAst + IntDAEConstAst + TrueDAEConstAst + FalseDAEConstAst
 
   sem daeConstToString =
   | FloatDAEConst r -> float2string r.val.v
+  | IntDAEConst r -> int2string r.val.v
+  | TrueDAEConst _ -> "true"
+  | FalseDAEConst _ -> "false"
 end
 
 
@@ -193,15 +196,17 @@ lang DAEExprPrettyPrint = DAEParsePrettyPrintBase +
   SubDAEExprAst +
   MulDAEExprAst +
   DivDAEExprAst +
+  LtDAEExprAst +
   MatchInDAEExprAst +
   LetDAEExprAst +
   PrimDAEExprAst
 
   sem daeExprPrecedence =
-  | VarDAEExpr _ | TupleDAEExpr _ | ProjDAEExpr _ | ConstDAEExpr _  -> 5
-  | AppDAEExpr _ -> 4
-  | MulDAEExpr _ | DivDAEExpr _ -> 3
-  | AddDAEExpr _ | SubDAEExpr _ -> 2
+  | VarDAEExpr _ | TupleDAEExpr _ | ProjDAEExpr _ | ConstDAEExpr _  -> 6
+  | AppDAEExpr _ -> 5
+  | MulDAEExpr _ | DivDAEExpr _ -> 4
+  | AddDAEExpr _ | SubDAEExpr _ -> 3
+  | LtDAEExpr _ -> 2
   | AbsDAEExpr _ -> 1
   | _ -> 0
 
@@ -276,6 +281,8 @@ lang DAEExprPrettyPrint = DAEParsePrettyPrintBase +
     daeBinOpToString ctx (daeExprPrecedence expr, "*", r.left, r.right)
   | expr & DivDAEExpr r ->
     daeBinOpToString ctx (daeExprPrecedence expr, "/", r.left, r.right)
+  | expr & LtDAEExpr r ->
+    daeBinOpToString ctx (daeExprPrecedence expr, "<", r.left, r.right)
   | MatchInDAEExpr r ->
     match daeExprToStringH ctx r.target with (ctx, target) in
     match daePatToStringH ctx r.pat with (ctx, pat) in
