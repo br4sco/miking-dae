@@ -10,6 +10,7 @@ include "mexpr/cse.mc"
 include "./dae.mc"
 include "./desugar.mc"
 include "./dae-arg.mc"
+include "./built-in.mc"
 
 let peadaeNameSpace = "PEADAE"
 
@@ -30,7 +31,7 @@ lang DAECompile =
   sem daeCompile : Options -> TmDAERec -> Expr
   sem daeCompile options =| daer ->
     let logDebug = lam head. lam msg.
-      logDebug (lam. strJoin "\n" [join ["daeCompile:", msg, ":"], msg])
+      logDebug (lam. strJoin "\n" [join ["daeCompile:", head, ":"], msg ()])
     in
     match typeCheck (adBuiltinSymsToConsts (adSymbolize (TmDAE daer)))
       with TmDAE daer
@@ -44,8 +45,8 @@ lang DAECompile =
         } (join [daeSrcPathExn (), "/runtime.mc"])
       in
       let runtime = symbolize runtime in
-      let runtimeNames = [
-        "daeRuntimeRun", "sin", "cos", "exp", "pow", "sqrt", "onehot"
+      let runtimeNames = concat (mapKeys daeBuiltins) [
+        "daeRuntimeRun", "sin", "cos", "exp", "pow", "sqrt"
       ] in
       let runtimeNames =
         foldl2
@@ -120,7 +121,7 @@ lang DAECompile =
              nameCmp
              (map
                 (lam x. (x.1, mapFindExn x.0 runtimeNames))
-                adBuiltinSymbols))
+                (concat adBuiltinSymbols (mapBindings daeBuiltins))))
           t
       in
       bind_ runtime t
