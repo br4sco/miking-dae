@@ -57,14 +57,14 @@ lang DAEParseDesugar = DAEAst
 
   sem daeDesugarUnOp : Info -> Const -> DAEExpr -> Expr
   sem daeDesugarUnOp info c =
-  -- | right ->
-  --   let ty = TyUnknown { info = info } in
-  --   TmApp {
-  --     lhs = TmConst { val = c, info = info, ty = ty },
-  --     rhs = daeDesugarExpr right,
-  --     ty = ty,
-  --     info = info
-  --   }
+  | right ->
+    let ty = TyUnknown { info = info } in
+    TmApp {
+      lhs = TmConst { val = c, info = info, ty = ty },
+      rhs = daeDesugarExpr right,
+      ty = ty,
+      info = info
+    }
 
   sem daeDesugarExpr : DAEExpr -> Expr
   sem daeDesugarExpr =
@@ -92,6 +92,32 @@ lang DAEParseDesugar = DAEAst
     ty = TyUnknown { info = r.info },
     info = r.info
   }
+  | AppDAEExpr (r & {fn = ConstDAEExpr { val = PredDAEConst _ }}) ->
+    let ty = TyUnknown { info = r.info } in
+    TmApp {
+      lhs = TmApp {
+        lhs = TmConst { val = CSubi (), info = r.info, ty = ty },
+        rhs = daeDesugarExpr r.arg,
+        ty = ty,
+        info = r.info
+      },
+      rhs = TmConst { val = CInt { val = 1 }, info = r.info, ty = ty },
+      ty = ty,
+      info = r.info
+    }
+  -- | AppDAEExpr (r & {fn = ConstDAEExpr { val = ExpDAEConst _ }}) ->
+  --   let ty = TyUnknown { info = r.info } in
+  --   TmApp {
+  --     lhs = TmApp {
+  --       lhs = TmConst { val = CSubi (), info = r.info, ty = ty },
+  --       rhs = daeDesugarExpr r.arg,
+  --       ty = ty,
+  --       info = r.info
+  --     },
+  --     rhs = TmConst { val = CInt { val = 1 }, info = r.info, ty = ty },
+  --     ty = ty,
+  --     info = r.info
+  --   }
   | TupleDAEExpr r ->
     tmTuple r.info (TyUnknown { info = r.info }) (map daeDesugarExpr r.exprs)
   | ProjDAEExpr r ->
@@ -125,6 +151,8 @@ lang DAEParseDesugar = DAEAst
   | MulDAEExpr r -> daeDesugarBinOp r.info (CMulf ()) (r.left, r.right)
   | DivDAEExpr r -> daeDesugarBinOp r.info (CDivf ()) (r.left, r.right)
   | LtDAEExpr r -> daeDesugarBinOp r.info (CLti ()) (r.left, r.right)
+  | EqDAEExpr r -> daeDesugarBinOp r.info (CEqi ()) (r.left, r.right)
+  | NegDAEExpr r -> daeDesugarUnOp r.info (CNegf ()) r.right
   | MatchInDAEExpr r ->
     let ty = TyUnknown { info = r.info } in
     TmMatch {
@@ -135,6 +163,16 @@ lang DAEParseDesugar = DAEAst
       ty = ty,
       info = r.info
     }
+  | IfDAEExpr r ->
+    let ty = TyUnknown { info = r.info } in
+    TmMatch {
+      target = daeDesugarExpr r.pred,
+      pat = PatBool { val = true, info = r.info, ty = ty },
+      thn = daeDesugarExpr r.thn,
+      els = daeDesugarExpr r.els,
+      ty = ty,
+      info = r.info
+    }
   | LetDAEExpr r ->
     let ty = TyUnknown { info = r.info } in
     TmLet {
@@ -142,6 +180,21 @@ lang DAEParseDesugar = DAEAst
       tyAnnot = ty,
       tyBody = ty,
       body = daeDesugarExpr r.arg,
+      inexpr = daeDesugarExpr r.body,
+      ty = ty,
+      info = r.info
+    }
+  | RecLetDAEExpr r ->
+    let ty = TyUnknown { info = r.info } in
+    let binding = {
+      ident = r.name.v,
+      tyAnnot = ty,
+      tyBody = ty,
+      body = daeDesugarExpr r.arg,
+      info = r.info
+    } in
+    TmRecLets {
+      bindings = [binding],
       inexpr = daeDesugarExpr r.body,
       ty = ty,
       info = r.info
@@ -165,6 +218,7 @@ lang DAEParseDesugar = DAEAst
   sem daeDesugarTop : DAETop -> Expr
   sem daeDesugarTop =
   | LetDAETop r -> nulet_ r.name.v (daeDesugarExpr r.arg)
+  | RecLetDAETop r -> nureclets_ [(r.name.v, daeDesugarExpr r.arg)]
 
   sem daeDesugarVars : DAEVar -> [(Name, Type)]
   sem daeDesugarVars =
@@ -247,10 +301,20 @@ lang DAEParseDesugar = DAEAst
             info = i,
             name = { i = i, v = r.ident }
           })))
+  | TmRecLets (r & { bindings = [binding] }) ->
+    optionBind (daeResugarExpr binding.body) (lam arg.
+      optionBind (daeResugarExpr r.inexpr) (lam body.
+        Some
+          (RecLetDAEExpr {
+            arg = arg,
+            body = body,
+            info = r.info,
+            name = { i = r.info, v = binding.ident }
+          })))
   | TmMatch {
     info = info,
     target = target,
-    pat = pat,
+    pat = pat & !(PatBool { val = true }),
     thn = thn,
     els = TmNever _
   } ->
@@ -291,6 +355,22 @@ lang DAEParseDesugar = DAEAst
                 body = body,
                 info = info,
                 target = target}))))
+  | TmMatch {
+    info = info,
+    target = target,
+    pat = PatBool { val = true },
+    thn = thn,
+    els = els & !TmNever _
+  } ->
+    optionBind (daeResugarExpr target) (lam pred.
+      optionBind (daeResugarExpr thn) (lam thn.
+        optionBind (daeResugarExpr els) (lam els.
+          Some
+            (IfDAEExpr {
+              pred = pred,
+              thn = thn,
+              els = els,
+              info = info}))))
   | _ -> None ()
 
   sem daeResugarUnOp
