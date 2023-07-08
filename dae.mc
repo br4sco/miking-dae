@@ -1080,7 +1080,7 @@ let expected = _parseExpr "
  [ 2., 0., 0., negf 1., 0. ])
   "
 in
-let actual = constantfoldLite (peval iexpr) in
+let actual = constantfoldLets (peval iexpr) in
 -- utest expected with actual using eqExpr in
 -- OK, utest fails due to float comparsions.
 logSetLogLevel logLevel.error;
@@ -1099,7 +1099,7 @@ lam y: [Float]. lam yp: [Float].
   t5
   "
 in
-let actual = constantfoldLite (peval oexpr) in
+let actual = constantfoldLets (peval oexpr) in
 utest expected with actual using eqExpr in
 
 let expected = _parseExpr "
@@ -1118,7 +1118,7 @@ lam y. lam yp. [
 ]
   "
 in
-let actual = constantfoldLite (peval rexpr) in
+let actual = constantfoldLets (peval rexpr) in
 utest expected with actual using eqExpr in
 
 let expected = _parseExpr "
@@ -1160,7 +1160,7 @@ in
 let daer2 = daeOrderReduce state2 (nameSym "y") (nameSym "yp") daer2 in
 let rexpr2 = daeGenResExpr daer2 in
 let actual =
-  constantfoldLite (pevalExpr { pevalCtxEmpty () with maxRecDepth = 0 } rexpr2)
+  constantfoldLets (pevalExpr { pevalCtxEmpty () with maxRecDepth = 0 } rexpr2)
 in
 utest expected with actual using eqExpr in
 
@@ -1199,10 +1199,10 @@ in
 let daer2 = daeOrderReduce state2 (nameSym "y") (nameSym "yp") daer2 in
 let rexpr2 = daeGenResExpr daer2 in
 let actual =
-  constantfoldLite (pevalExpr { pevalCtxEmpty () with maxRecDepth = 3 } t)
+  constantfoldLets (pevalExpr { pevalCtxEmpty () with maxRecDepth = 3 } t)
 in
 
-logSetLogLevel logLevel.debug;
+logSetLogLevel logLevel.error;
 -- logMsg logLevel.debug (lam. strJoin "\n" ["expected:", expr2str expected]);
 logMsg logLevel.debug (lam. strJoin "\n" ["actual:", expr2str actual]);
 logSetLogLevel logLevel.error;
@@ -1308,7 +1308,7 @@ lam idxs. lam y. lam yp.
     idxs
   "
 in
-let actual = constantfoldLite (peval (daeGenJacY daer)) in
+let actual = constantfoldLets (peval (daeGenJacY daer)) in
 utest expected with actual using eqExpr in
 
 ----------------------------------------------
@@ -1358,7 +1358,7 @@ lam y. lam yp. [
   "
 in
 let actual =
-  constantfoldLite (peval (app_ (daeGenJacY daer) idxs))
+  constantfoldLets (peval (app_ (daeGenJacY daer) idxs))
 in
 utest expected with actual using eqExpr in
 
