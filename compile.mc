@@ -57,7 +57,16 @@ lang DAECompile =
       in
       -- Compile DAE
       let daer = daeAnnotDVars daer in
+      logDebug "analysis"
+        (lam.
+          strJoin " " ["number of equations:", int2string (length daer.eqns)]);
       let analysis = daeStructuralAnalysis daer in
+      logDebug "analysis"
+        (lam. strJoin " " [
+          "max equation offset",
+          int2string
+            (maxOrElse (lam. error "impossible") subi analysis.eqnsOffset)
+        ]);
       let daer = daeIndexReduce analysis.eqnsOffset daer in
       let state = daeFirstOrderState analysis.varOffset in
       let isdiffvars = daeIsDiffVars state in

@@ -1,5 +1,5 @@
-MODELS_NUMERIC_JAC := harmonic.dae pendulum.dae lrc.dae body.dae pendulum-3d.dae furuta.dae
-MODELS_GEN_JAC := harmonic.dae pendulum.dae lrc.dae pendulum-3d.dae furuta.dae
+MODELS_NUMERIC_JAC := harmonic.dae pendulum.dae lrc.dae body.dae pendulum-3d.dae furuta.dae cauer.dae
+MODELS_GEN_JAC := harmonic.dae pendulum.dae lrc.dae pendulum-3d.dae furuta.dae cauer.dae
 OKS := $(MODELS_NUMERIC_JAC:.dae=-numjac.OK) $(MODELS_GEN_JAC:.dae=-1.OK) $(MODELS_GEN_JAC:.dae=-09.OK) $(MODELS_GEN_JAC:.dae=-08.OK) $(MODELS_GEN_JAC:.dae=-07.OK) $(MODELS_GEN_JAC:.dae=-06.OK) $(MODELS_GEN_JAC:.dae=-05.OK) $(MODELS_GEN_JAC:.dae=-04.OK) $(MODELS_GEN_JAC:.dae=-03.OK) $(MODELS_GEN_JAC:.dae=-02.OK) $(MODELS_GEN_JAC:.dae=-01.OK) $(MODELS_GEN_JAC:.dae=-00.OK)
 
 EXES := $(OKS:.OK=.exe)

@@ -162,13 +162,18 @@ end
 
 
 lang DAEConstPrettyPrint = DAEParsePrettyPrintBase +
-  FloatDAEConstAst + IntDAEConstAst + TrueDAEConstAst + FalseDAEConstAst
+  FloatDAEConstAst +
+  IntDAEConstAst +
+  TrueDAEConstAst +
+  FalseDAEConstAst +
+  PredDAEConstAst
 
   sem daeConstToString =
   | FloatDAEConst r -> float2string r.val.v
   | IntDAEConst r -> int2string r.val.v
   | TrueDAEConst _ -> "true"
   | FalseDAEConst _ -> "false"
+  | PredDAEConst _ -> "pred"
 end
 
 
@@ -197,25 +202,41 @@ lang DAEExprPrettyPrint = DAEParsePrettyPrintBase +
   MulDAEExprAst +
   DivDAEExprAst +
   LtDAEExprAst +
+  EqDAEExprAst +
+  NegDAEExprAst +
   MatchInDAEExprAst +
+  IfDAEExprAst +
   LetDAEExprAst +
+  RecLetDAEExprAst +
   PrimDAEExprAst
 
   sem daeExprPrecedence =
-  | VarDAEExpr _ | TupleDAEExpr _ | ProjDAEExpr _ | ConstDAEExpr _  -> 6
+  | VarDAEExpr _ | TupleDAEExpr _ | ProjDAEExpr _ | ConstDAEExpr _  -> 7
+  | NegDAEExpr _ -> 6
   | AppDAEExpr _ -> 5
   | MulDAEExpr _ | DivDAEExpr _ -> 4
   | AddDAEExpr _ | SubDAEExpr _ -> 3
-  | LtDAEExpr _ -> 2
+  | LtDAEExpr _ | EqDAEExpr _ -> 2
   | AbsDAEExpr _ -> 1
   | _ -> 0
 
-  sem daeBindingToString : DAEPPCtx -> (Name, DAEExpr) -> (DAEPPCtx, String)
-  sem daeBindingToString ctx =
-  | (name, expr) ->
+  sem daeBindingToString
+    : Bool -> DAEPPCtx -> (Name, DAEExpr) -> (DAEPPCtx, String)
+  sem daeBindingToString rec ctx =
+  | (name, arg) ->
     match daeVarNameToString ctx name with (ctx, name) in
-    match daeExprToStringH ctx expr with (ctx, expr) in
-    (ctx, join ["let ", name, " = ", expr])
+    match daeExprToStringH ctx arg with (ctx, arg) in
+    (ctx,
+     join [if rec then "reclet" else "let ", name, " = ", arg])
+
+  sem daeBindingInToString
+    : Bool -> DAEPPCtx -> (Name, DAEExpr, DAEExpr) -> (DAEPPCtx, String)
+  sem daeBindingInToString rec ctx =
+  | (name, arg, body) ->
+    match daeBindingToString rec ctx (name, arg) with (ctx, binding) in
+    match daeExprToStringH ctx body with (ctx, body) in
+    (ctx,
+     join [binding, " in ", body])
 
   sem daeBinOpToString
     : DAEPPCtx -> (Int, String, DAEExpr, DAEExpr) -> (DAEPPCtx, String)
@@ -232,6 +253,17 @@ lang DAEExprPrettyPrint = DAEParsePrettyPrintBase +
       with (ctx, right)
     in
     (ctx, join [left, op, right])
+
+  sem daeUnOpToString
+    : DAEPPCtx -> (Int, String, DAEExpr) -> (DAEPPCtx, String)
+  sem daeUnOpToString ctx =
+  | (prec, op, right) ->
+    match daeExprToStringH ctx right with (ctx, rightStr) in
+    match
+      daePPMaybeGroup (lti (daeExprPrecedence right) prec) ctx rightStr
+      with (ctx, right)
+    in
+    (ctx, join [op, right])
 
   sem daeExprToStringH ctx =
   | VarDAEExpr r -> daeVarNameToString ctx r.name.v
@@ -283,19 +315,24 @@ lang DAEExprPrettyPrint = DAEParsePrettyPrintBase +
     daeBinOpToString ctx (daeExprPrecedence expr, "/", r.left, r.right)
   | expr & LtDAEExpr r ->
     daeBinOpToString ctx (daeExprPrecedence expr, "<", r.left, r.right)
+  | expr & EqDAEExpr r ->
+    daeBinOpToString ctx (daeExprPrecedence expr, "==", r.left, r.right)
+  | expr & NegDAEExpr r ->
+    daeUnOpToString ctx (daeExprPrecedence expr, "-.", r.right)
   | MatchInDAEExpr r ->
     match daeExprToStringH ctx r.target with (ctx, target) in
     match daePatToStringH ctx r.pat with (ctx, pat) in
     match daeExprToStringH ctx r.body with (ctx, body) in
     (ctx, strJoin " " ["match", target, "with", pat, "in", body])
+  | IfDAEExpr r ->
+    match daeExprToStringH ctx r.pred with (ctx, pred) in
+    match daeExprToStringH ctx r.thn with (ctx, thn) in
+    match daeExprToStringH ctx r.els with (ctx, els) in
+    (ctx, strJoin " " ["if", pred, "then", thn, "else", els])
   | LetDAEExpr r ->
-    match daeBindingToString ctx (r.name.v, r.arg) with (ctx, binding) in
-    match daeExprToStringH ctx r.body with (ctx, body) in
-    (ctx, strJoin " " [
-      binding,
-      "in",
-      body
-    ])
+    daeBindingInToString false ctx (r.name.v, r.arg, r.body)
+  | RecLetDAEExpr r ->
+    daeBindingInToString true ctx (r.name.v, r.arg, r.body)
   | expr & PrimDAEExpr r ->
     match daeExprToStringH ctx r.left with (ctx, left) in
     match
@@ -334,11 +371,14 @@ end
 
 
 lang DAETopPrettyPrint = DAEParsePrettyPrintBase + DAEExprPrettyPrint +
-  LetDAETopAst
+  LetDAETopAst + RecLetDAETopAst
 
   sem daeTopToStringH ctx =
   | LetDAETop r ->
-    match daeBindingToString ctx (r.name.v, r.arg) with (ctx, binding) in
+    match daeBindingToString false ctx (r.name.v, r.arg) with (ctx, binding) in
+    (ctx, strJoin " " [binding, "end"])
+  | RecLetDAETop r ->
+    match daeBindingToString true ctx (r.name.v, r.arg) with (ctx, binding) in
     (ctx, strJoin " " [binding, "end"])
 end
 

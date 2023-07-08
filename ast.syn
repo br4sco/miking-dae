@@ -23,6 +23,8 @@ prod Float: DAEConst = val:Float
 prod Int: DAEConst = val:Int
 prod True: DAEConst = "true"
 prod False: DAEConst = "false"
+prod Pred: DAEConst = "pred"
+-- prod Exp: DAEConst = "exp"
 
 -- Patterns
 prod TupleDAEPat: DAEPat = "{" (names:LName ("," names:LName)*)? "}"
@@ -39,9 +41,14 @@ infix left Sub: DAEExpr = "-"
 infix left Mul: DAEExpr = "*"
 infix left Div: DAEExpr = "/"
 infix left Lt: DAEExpr = "<"
+infix left Eq: DAEExpr = "=="
+prefix Neg: DAEExpr = "-."
 prod MatchIn: DAEExpr =
   "match" target:DAEExpr "with" pat:DAEPat "in" body:DAEExpr
+prod If: DAEExpr =
+  "if" pred:DAEExpr "then" thn:DAEExpr "else" els:DAEExpr
 prod Let: DAEExpr = "let" name:LName "=" arg:DAEExpr "in" body:DAEExpr
+prod RecLet: DAEExpr = "reclet" name:LName "=" arg:DAEExpr "in" body:DAEExpr
 postfix Prim: DAEExpr = "'"
 
 -- Equations
@@ -52,6 +59,7 @@ prod VarsDAEVar: DAEVar = names:LName ("," names:LName)* ":" ty:DAEType
 
 -- Top-level
 prod LetDAETop: DAETop = "let" name:LName "=" arg:DAEExpr "end"
+prod RecLetDAETop: DAETop = "reclet" name:LName "=" arg:DAEExpr "end"
 
 -- Program
 prod Prog: DAEProg =
@@ -59,7 +67,7 @@ prod Prog: DAEProg =
   "variables"
   (vars:DAEVar) (";" vars:DAEVar)*
   "init"
-  (ieqns:DAEEqn) (";" ieqns:DAEEqn)*
+  ((ieqns:DAEEqn) (";" ieqns:DAEEqn)*)?
   "equations"
   (eqns:DAEEqn) (";" eqns:DAEEqn)*
   "output"
@@ -69,10 +77,12 @@ prod Prog: DAEProg =
 precedence {
   Proj;
   Prim;
+  Neg;
   App;
   Mul Div;
   Add Sub;
   Lt;
+  If;
   Abs;
 }
 

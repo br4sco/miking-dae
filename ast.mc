@@ -95,7 +95,10 @@ lang DAEAst = DAEParseAst + AstResult +
         (lam l. mapLookup (stringToSid l) r.bindings)
         ["ieqns", "eqns", "out"]
     case [Some (TmRecord ieqns), Some (TmRecord eqns), Some out] then
-      match map (lam r. record2tuple r.bindings) [ieqns, eqns] with
+      match
+        if mapIsEmpty ieqns.bindings then [Some [], record2tuple eqns.bindings]
+        else
+          map (lam r. record2tuple r.bindings) [ieqns, eqns] with
         [Some ieqns, Some eqns]
       then
         {

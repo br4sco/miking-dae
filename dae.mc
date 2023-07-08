@@ -642,11 +642,30 @@ let daer = _parseDAEProg "
   "
 in
 
+let daer2 = _parseDAEProg "
+  reclet pow = lam x. lam n.
+    if n < 1 then 1. else x * pow x (pred n)
+  end
+  variables
+  x, y, h, u: Float
+  init
+  x = 1.;
+  x' = 2.;
+  y'' = 0. - 1.
+  equations
+  x'' = x * h;
+  y'' = y * h - 1.;
+  x * x + pow y 2 = 1.;
+  u = pow x' 2 + pow y' 2
+  output
+  {x, y}
+  "
+in
+
 -------------------------
 -- Test: daeAnnotDVars --
 -------------------------
 
-let daer = daeAnnotDVars daer in
 let expected = _parseAsTmDAE "
 let mul = lam x. lam y. mulf x y in
 let pow2 = lam x. mul x x in
@@ -659,7 +678,34 @@ lam x: Float. lam y: Float. lam h: Float. {
 }
   "
 in
-utest expected with TmDAE daer using eqExpr in
+let daer = daeAnnotDVars daer in
+let actual = TmDAE daer in
+utest expected with actual using eqExpr in
+
+let expected = _parseAsTmDAE "
+recursive
+  let pow = lam x1. lam n.
+    match lti n 1 with true then 1.
+    else mulf x1 (pow x1 (subi n 1))
+in
+lam x: Float. lam y: Float. lam h: Float. lam u: Float. {
+  ieqns =
+  (subf (prim 0 x) 1.
+    ,subf (prim 1 x) 2.
+    ,subf (prim 2 y) (subf 0. 1.)),
+
+  eqns =
+  (subf (prim 2 x) (mulf (prim 0 x) (prim 0 h))
+  ,subf (prim 2 y) (subf (mulf (prim 0 y) (prim 0 h)) 1.)
+  ,subf (addf (mulf (prim 0 x) (prim 0 x)) (pow (prim 0 y) 2)) 1.
+  ,subf (prim 0 u) (addf (pow (prim 1 x) 2) (pow (prim 1 y) 2))),
+  out = (prim 0 x, prim 0 y)
+}
+  "
+in
+let daer2 = daeAnnotDVars daer2 in
+let actual = TmDAE daer2 in
+utest expected with actual using eqExpr in
 
 ------------------------
 -- Test: daeStructure --
@@ -690,6 +736,16 @@ let ns = actual.eqnsOffset in
 let varOffset = actual.varOffset in
 utest _prepDVars varOffset with expected.varOffset in
 utest ns with expected.eqnsOffset in
+
+let expected = {
+  varOffset = [("x", 2), ("y", 2), ("h", 0), ("u", 0)],
+  eqnsOffset = [0, 0, 2, 0]
+} in
+let actual = daeStructuralAnalysis daer2 in
+let ns2 = actual.eqnsOffset in
+let varOffset2 = actual.varOffset in
+utest _prepDVars varOffset2 with expected.varOffset in
+utest ns2 with expected.eqnsOffset in
 
 --------------------------
 -- Test: daeIndexReduce --
@@ -729,7 +785,59 @@ lam x: Float. lam y: Float. lam h:Float. {
   "
 in
 let daer = daeIndexReduce ns daer in
-utest expected with TmDAE daer using eqExpr in
+let actual = TmDAE daer in
+utest expected with actual using eqExpr in
+
+let expected = _parseAsTmDAE "
+recursive let pow = lam x. lam n.
+  match lti n 1 with true then 1.
+  else mulf x (pow x (subi n 1))
+in
+recursive let powp = lam xp. lam np.
+  match lti np 1 with true then (1., 0.)
+  else
+    (lam x. lam y.
+      (mulf x.0 y.0
+      ,addf (mulf x.0 y.1) (mulf x.1 y.0)))
+      xp (powp xp (subi np 1))
+in
+recursive
+  let powpp = lam xpp. lam npp.
+    match lti npp 1 with true then (1., 0., 0.)
+    else
+      (lam x. lam y.
+        (mulf x.0 y.0
+        ,addf (mulf x.0 y.1) (mulf x.1 y.0)
+        ,addf
+           (addf (mulf x.0 y.2) (mulf 2. (mulf x.1 y.1)))
+           (mulf x.2 y.0)))
+        xpp (powpp xpp (subi npp 1))
+in
+lam x: Float. lam y: Float. lam h: Float. lam u: Float. {
+  ieqns =
+  (subf (prim 0 x) 1., subf (prim 1 x) 2., subf (prim 2 y) (subf 0. 1.)),
+
+  eqns =
+  (subf (prim 2 x) (mulf (prim 0 x) (prim 0 h)),
+   subf (prim 2 y) (subf (mulf (prim 0 y) (prim 0 h)) 1.)
+  ,((lam x1. lam y1. (subf x1.0 y1.0, subf x1.1 y1.1, subf x1.2 y1.2))
+      ((lam x2. lam y2. (addf x2.0 y2.0, addf x2.1 y2.1, addf x2.2 y2.2))
+         ((lam x. lam y.
+             (mulf x.0 y.0
+             ,addf (mulf x.0 y.1) (mulf x.1 y.0)
+             ,addf (addf (mulf x.0 y.2) (mulf 2. (mulf x.1 y.1))) (mulf x.2 y.0)))
+          (prim 0 x, prim 1 x, prim 2 x) (prim 0 x, prim 1 x, prim 2 x))
+         (powpp (prim 0 y, prim 1 y, prim 2 y) 2))
+      (1., 0., 0.)).2
+  ,subf (prim 0 u) (addf (pow (prim 1 x) 2) (pow (prim 1 y) 2))),
+
+  out = (prim 0 x, prim 0 y)
+}
+  "
+in
+let daer2 = daeIndexReduce ns2 daer2 in
+let actual =  TmDAE daer2 in
+utest expected with actual using eqExpr in
 
 ------------------------------
 -- Test: daeFirstOrderState --
@@ -759,12 +867,42 @@ utest map (lam x. (_prepDVar x.0, x.1)) (mapBindings actual.indexMap)
 in
 let state = actual in
 
+let expected = {
+  ys = [
+    These (("x", 0), ("x", 1)),
+    These (("x", 1), ("x", 2)),
+    These (("y", 0), ("y", 1)),
+    These (("y", 1), ("y", 2)),
+    This ("h", 0),
+    This ("u", 0)
+  ],
+  indexMap = [
+    (("x", 0), This 0),
+    (("x", 1), These (1, 0)),
+    (("x", 2), That 1),
+    (("y", 0), This 2),
+    (("y", 1), These (3, 2)),
+    (("y", 2), That 3),
+    (("h", 0), This 4),
+    (("u", 0), This 5)
+  ] } in
+let actual = daeFirstOrderState varOffset2 in
+utest map (theseBiMap _prepDVar _prepDVar) actual.ys with expected.ys in
+utest map (lam x. (_prepDVar x.0, x.1)) (mapBindings actual.indexMap)
+  with expected.indexMap
+in
+let state2 = actual in
+
 -------------------------
 -- Test: daeIsDiffVars --
 -------------------------
 
 let expected = [true, true, true, true, false] in
 let actual = daeIsDiffVars state in
+utest expected with actual in
+
+let expected = [true, true, true, true, false, false] in
+let actual = daeIsDiffVars state2 in
 utest expected with actual in
 
 --------------------------
@@ -982,6 +1120,93 @@ lam y. lam yp. [
 in
 let actual = constantfoldLite (peval rexpr) in
 utest expected with actual using eqExpr in
+
+let expected = _parseExpr "
+recursive let pow = lam x. lam n.
+  match lti n 1 with true then 1.
+  else mulf x (pow x (subi n 1))
+in
+recursive let powpp = lam xpp. lam npp.
+    match lti npp 1 with true then (1., 0., 0.)
+    else
+      let t = powpp xpp (subi npp 1) in
+      (mulf xpp.0 t.0
+      ,addf (mulf xpp.0 t.1) (mulf xpp.1 t.0)
+      ,addf
+         (addf (mulf xpp.0 t.2) (mulf 2. (mulf xpp.1 t.1)))
+         (mulf xpp.2 t.0))
+in
+lam y. lam yp. [
+  subf (get yp 1) (mulf (get y 0) (get y 4)),
+  subf (get yp 3) (subf (mulf (get y 2) (get y 4)) 1.),
+  addf
+    (addf
+      (addf
+         (mulf (get y 0) (get yp 1))
+         (mulf 2.
+            (mulf (get y 1) (get y 1))))
+      (mulf (get yp 1) (get y 0)))
+    (powpp (get y 2, get y 3, get yp 3) 2).2,
+  subf
+    (get y 5)
+    (addf
+       (pow (get y 1) 2)
+       (pow (get y 3) 2)),
+  subf (get y 1) (get yp 0),
+  subf (get y 3) (get yp 2)
+]
+  "
+in
+let daer2 = daeOrderReduce state2 (nameSym "y") (nameSym "yp") daer2 in
+let rexpr2 = daeGenResExpr daer2 in
+let actual =
+  constantfoldLite (pevalExpr { pevalCtxEmpty () with maxRecDepth = 0 } rexpr2)
+in
+utest expected with actual using eqExpr in
+
+let t = _parseExpr "
+lam p.
+recursive let pow = lam x. lam n.
+  match lti n 1 with true then 1.
+  else mulf x (pow x (subi n 1))
+in
+recursive let powpp = lam xpp. lam npp.
+    match lti npp 1 with true then (1., 0., 0.)
+    else
+      let t = powpp xpp (subi npp 1) in
+      (mulf xpp.0 t.0
+      ,addf (mulf xpp.0 t.1) (mulf xpp.1 t.0)
+      ,addf
+         (addf (mulf xpp.0 t.2) (mulf 2. (mulf xpp.1 t.1)))
+         (mulf xpp.2 t.0))
+in
+lam y. lam yp. [
+  subf (get yp 1) (mulf (get y 0) (get y 4)),
+  subf (get yp 3) (subf (mulf (get y 2) (get y 4)) 1.),
+  addf
+    (powpp (get y 0, get y 1, get yp 1) p).2
+    (powpp (get y 2, get y 3, get yp 3) p).2,
+  subf
+    (get y 5)
+    (addf
+       (pow (get y 1) 2)
+       (pow (get y 3) 2)),
+  subf (get y 1) (get yp 0),
+  subf (get y 3) (get yp 2)
+]
+  "
+in
+let daer2 = daeOrderReduce state2 (nameSym "y") (nameSym "yp") daer2 in
+let rexpr2 = daeGenResExpr daer2 in
+let actual =
+  constantfoldLite (pevalExpr { pevalCtxEmpty () with maxRecDepth = 3 } t)
+in
+
+logSetLogLevel logLevel.debug;
+-- logMsg logLevel.debug (lam. strJoin "\n" ["expected:", expr2str expected]);
+logMsg logLevel.debug (lam. strJoin "\n" ["actual:", expr2str actual]);
+logSetLogLevel logLevel.error;
+
 
 ---------------------------
 -- Test: daeJacStructure --
