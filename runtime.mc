@@ -10,6 +10,7 @@ let debugPrint = lam msg.
     flushStderr ()
   else ()
 
+-- Built-ins
 let onehot = lam n. lam i. create n (lam j. if eqi i j then 1. else 0.)
 
 type Vec = Tensor[Float]

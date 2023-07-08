@@ -6,6 +6,7 @@ include "mexpr/constant-fold.mc"
 include "./desugar.mc"
 include "./daecore-structure.mc"
 include "./lib/vec.mc"
+include "./built-in.mc"
 
 let _daeIDMap = ref (mapEmpty (tupleCmp2 nameCmp subi))
 let daeID : (Name, Int) -> Name
@@ -455,8 +456,7 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold
                (foldl_
                   (nulams_ [_acc1, _jis]
                      (bind_
-                        (nulet_ (daeID (y, 1))
-                           (appSeq_ (uconst_ (COnehot ())) [int_ n, _j]))
+                        (nulet_ (daeID (y, 1)) (onehot_ (int_ n) _j))
                         (foldl_
                            (nulams_ [_acc2, _i]
                               (cons_
