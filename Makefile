@@ -1,10 +1,17 @@
+TOOL_NAME=peadae
+BIN_PATH=${HOME}/.local/bin
+
 SRCS := $(shell find . -name "*.mc" -a ! -name "peadae.mc" -a ! -name "ast_gen.mc" -a ! -wholename "./examples/*")
 TESTS := $(SRCS:.mc=.test)
 TESTBINS := $(SRCS:.mc=.test.exe.run)
 
 .PHONY: test test-examples watch-test clean
 
-all: peadae.exe
+all: build/${TOOL_NAME}
+
+build/${TOOL_NAME}: ${TOOL_NAME}.exe
+	mkdir -p build
+	mv ${TOOL_NAME}.exe build/${TOOL_NAME}
 
 test: $(TESTS)
 
@@ -29,7 +36,7 @@ test-all: test test-examples
 %.exe: %.mc
 	mi compile --output $@ $<
 
-peadae.exe: $(SRCS)
+${TOOL_NAME}.exe: $(SRCS)
 
 ast_gen.mc: ast.syn
 	mi syn ast.syn ast_gen.mc
@@ -37,6 +44,11 @@ ast_gen.mc: ast.syn
 watch:
 	find . "(" -name "*.mc" -o -name "*.syn" ")" -a ! -name "ast_gen.mc" | entr -rc make test
 
+install: build/${TOOL_NAME}
+	cp build/${TOOL_NAME} ${BIN_PATH}
+
+uninstall:
+	rm -f ${BIN_PATH}/${TOOL_NAME}
+
 clean:
-	rm -rf *.exe
-	make clean -C examples
+	rm -rf *.exe build

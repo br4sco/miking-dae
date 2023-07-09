@@ -9,7 +9,9 @@ type Options = {
   cse : Bool,
   aliasElim : Bool,
   numericJac : Bool,
-  jacSpecThreshold : Float
+  jacSpecThreshold : Float,
+  jacSpecThresholdAbsolute : Option Int,
+  outputOnlyLast : Bool
 }
 
 let defaultOptions = {
@@ -21,7 +23,9 @@ let defaultOptions = {
   cse = false,
   aliasElim = false,
   numericJac = false,
-  jacSpecThreshold = 1.
+  jacSpecThreshold = 1.,
+  jacSpecThresholdAbsolute = None (),
+  outputOnlyLast = true
 }
 
 let argConfig = [
@@ -47,8 +51,14 @@ let argConfig = [
    "Numerically approximate Jacobian. ",
    lam p. { p.options with numericJac = true }),
   ([("--jac-spec-threshold", " ", "<value>")],
-   "Abstract interval that constrols how many partial derivatives in the Jacobian should be specialized, where 0 means none and 1 means all. More specialized partial derivatives results in more code. ",
-   lam p. { p.options with jacSpecThreshold = argToFloatInterval p 0. 1. })
+   "Abstract interval that constrols how many partial derivatives in the Jacobian should be specialized, where 0 means none and 1 means all. More specialized partial derivatives results in more code. For a DAE with n equations this and --jac-spec-threshold phi, this is equivalent to --jac-spec-threshold-absolute (floor phi*n)",
+   lam p. { p.options with jacSpecThreshold = argToFloatInterval p 0. 1. }),
+  ([("--jac-spec-absolute", " ", "<value>")],
+   "The maximum number non-zero elements a partial derivative in the Jacobian must in order to be specialized. Overrides --jac-spec-threshold. ",
+   lam p. { p.options with jacSpecThresholdAbsolute = Some (argToInt p) }),
+  ([("--output-only-last", "", "")],
+   "Only output the last time-step to standard out. ",
+   lam p. { p.options with outputOnlyLast = true })
 ]
 
 let usage = lam prog. join [

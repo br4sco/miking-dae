@@ -17,7 +17,6 @@ let peadaeNameSpace = "PEADAE"
 lang DAECompile =
   DAE + MExprConstantFold + MExprFindSym + MExprSubstitute + BootParser + CSE
 
-
   sem daeSrcPathExn : () -> String
   sem daeSrcPathExn =| () ->
     optionGetOrElse
@@ -33,8 +32,8 @@ lang DAECompile =
     let logDebug = lam head. lam msg.
       logDebug (lam. strJoin "\n" [join ["daeCompile:", head, ":"], msg ()])
     in
-    match typeCheck (adBuiltinSymsToConsts (adSymbolize (TmDAE daer)))
-      with TmDAE daer
+    match daeTypeCheck (adBuiltinSymsToConsts (daeSymbolize (TmDAE daer))) with
+      TmDAE daer
     then
       -- Setup runtime
       let runtime =
@@ -58,6 +57,7 @@ lang DAECompile =
       in
       -- Compile DAE
       let daer = daeAnnotDVars daer in
+      let daer = if options.cse then daeCSE daer else daer in
       logDebug "analysis"
         (lam.
           strJoin " " ["number of equations:", int2string (length daer.eqns)]);
@@ -68,8 +68,23 @@ lang DAECompile =
           int2string
             (maxOrElse (lam. error "impossible") subi analysis.eqnsOffset)
         ]);
+      -- let daer = if options.cse then daeDestructiveCSE daer else daer in
       let daer = daeIndexReduce analysis.eqnsOffset daer in
       let state = daeFirstOrderState analysis.varOffset in
+      -- logDebug "first-order state"
+      --   (lam. strJoin "\n"
+      --         (mapi
+      --            (lam i. lam y. join [
+      --              int2string i, ":",
+      --              theseThese
+      --                (lam id. nameGetStr (daeID id))
+      --                (lam id. nameGetStr (daeID id))
+      --                (lam id1. lam id2. join [
+      --                  nameGetStr (daeID id1), ",", nameGetStr (daeID id2)
+      --                ])
+      --                y
+      --            ])
+      --            state.ys));
       let isdiffvars = daeIsDiffVars state in
       let daer = daeOrderReduce state (nameSym "y") (nameSym "yp") daer in
       let ts = [
@@ -80,7 +95,7 @@ lang DAECompile =
       in
       match
         if options.disablePeval then ts
-        else map (lam t. foldLets (peval t)) ts
+        else map (lam t. constantfoldLets (peval t)) ts
         with [iexpr, rexpr, oexpr]
       in
       match
@@ -89,22 +104,32 @@ lang DAECompile =
         else (iexpr, rexpr, oexpr)
         with (iexpr, rexpr, oexpr)
       in
-      match
-        if options.cse then
-          (cse iexpr, cse rexpr, cse oexpr)
-        else (iexpr, rexpr, oexpr)
-        with (iexpr, rexpr, oexpr)
+      -- match
+      --   if options.cse then
+      --     (cse iexpr, cse rexpr, cse oexpr)
+      --   else (iexpr, rexpr, oexpr)
+      --   with (iexpr, rexpr, oexpr)
+      -- in
+      let jacSpecThreshold =
+        match options.jacSpecThresholdAbsolute with Some n then
+          maxf (minf (divf (int2float n) (int2float (length daer.eqns))) 1.) 0.
+        else options.jacSpecThreshold
       in
       match
-        if options.numericJac then (ulam_ "" never_, ulam_ "" never_) else
-          (daeGenMixedJacY options.jacSpecThreshold daer,
-           daeGenMixedJacYp options.jacSpecThreshold daer)
+        if options.numericJac then (ulam_ "" never_, ulam_ "" never_)
+        else
+          if options.disablePeval then
+            (daeGenADJacY daer, daeGenADJacYp daer)
+          else
+            (daeGenMixedJacY jacSpecThreshold daer,
+             daeGenMixedJacYp jacSpecThreshold daer)
         with (jacY, jacYp)
       in
       -- Generate runtime
       let t =
         (appSeq_ (nvar_ (mapFindExn "daeRuntimeRun" runtimeNames)) [
           (bool_ options.debugRuntime),
+          (bool_ options.outputOnlyLast),
           (bool_ options.numericJac),
           seq_ (map bool_ isdiffvars),
           iexpr,
