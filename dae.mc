@@ -1,6 +1,7 @@
 include "these.mc"
 
 include "mexpr/free-vars.mc"
+include "mexpr/cse.mc"
 include "mexpr/constant-fold.mc"
 
 include "./desugar.mc"
@@ -21,7 +22,7 @@ let daeID : (Name, Int) -> Name
         modref _daeIDMap (mapInsert id name daeIDMap);
         name
 
-lang DAE = DAEAst + MExprFreeVars + MExprConstantFold
+lang DAE = DAEAst + MExprFreeVars + MExprConstantFold + MExprCSE
   sem daeAnnotDVars : TmDAERec -> TmDAERec
   sem daeAnnotDVars =| dae ->
     let vars = mapFromSeq nameCmp dae.vars in
@@ -36,7 +37,8 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold
     else error "impossible"
 
   sem daeStructure : TmDAERec -> [Set (Name, Int)]
-  sem daeStructure =| dae -> map dvars dae.eqns
+  sem daeStructure =| dae ->
+    map (lam eqn. dvars (peval (bind_ dae.bindings eqn))) dae.eqns
 
   type DAEStructuralAnalysis = {
     varOffset : [(Name, Int)],
@@ -64,11 +66,12 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold
     in
     -- Perform the structural analysis
     let analysis = consumeWarnErrsExn (structuralAnalysis eqnsStructure) in
+    let eqnsOffset = vecToSeq analysis.c in
     let varOffset =
       zipWith
         (lam v. lam d. (v.0, d)) dae.vars (vecToSeq analysis.d)
     in
-    { varOffset = varOffset, eqnsOffset = vecToSeq analysis.c }
+    { varOffset = varOffset, eqnsOffset = eqnsOffset }
 
   sem daeADExpr : Int -> Expr -> Expr
   sem daeADExpr n =| t -> ad n (daeADRenameVarsExpr n t)
@@ -102,6 +105,17 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold
   | PatNamed (r & {ident = (PName ident)}) ->
     PatNamed { r with ident = PName (daeID (ident, n)) }
   | p -> smap_Pat_Pat (daeADRenameVarsPat n) p
+
+  sem daeCSE : TmDAERec -> TmDAERec
+  sem daeCSE =| dae ->
+    let bindings = cseGlobal dae.bindings in
+    let eqns = map cse dae.eqns in
+    let out = cse dae.out in
+    { dae with bindings = bindings, eqns = eqns, out = out }
+
+  sem daeDestructiveCSE : TmDAERec -> TmDAERec
+  sem daeDestructiveCSE =| dae ->
+    _tmToTmDAERec (cseFunction false (_tmDAERecToTm dae))
 
   sem daeIndexReduce : [Int] -> TmDAERec -> TmDAERec
   sem daeIndexReduce ns =| dae ->
@@ -382,6 +396,8 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold
     match dae.vars with
       [(y, TySeq {ty = TyFloat _}), (yp, TySeq {ty = TyFloat _})]
     then
+      -- partially evaluate to get a more accurate structure. We top-level
+      let eqns = map (lam eqn. peval (bind_ dae.bindings eqn)) dae.eqns in
       recursive let inner = lam ident. lam acc. lam t.
         match t with
           TmApp {
@@ -395,7 +411,7 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold
       let f = lam ident. lam eqn.
         setToSeq (inner ident (setEmpty subi) eqn)
       in
-      (map (f y) dae.eqns, map (f yp) dae.eqns)
+      (map (f y) eqns, map (f yp) eqns)
     else
       error (errMsg "Not a first-order DAE" (TmDAE dae))
 
@@ -456,7 +472,8 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold
                (foldl_
                   (nulams_ [_acc1, _jis]
                      (bind_
-                        (nulet_ (daeID (y, 1)) (onehot_ (int_ n) _j))
+                        (nulet_ (daeID (y, 1))
+                           (appf2_ (uconst_ (COnehot ())) (int_ n) _j))
                         (foldl_
                            (nulams_ [_acc2, _i]
                               (cons_
@@ -499,43 +516,42 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold
         let n = length dae.eqns in
         let _jacc = nameSym "jacc" in
         let _idxs = nameSym "idxs" in
-        let indxs =
+        let idxs =
           let s = daeJacStructure dae in
           let s = if jacY then s.0 else  s.1 in
           daeJacStructureToIdxSeq s
         in
         let t = _daeGenJac jacY dae in
-        let idxs = lam idxs.
+        let idxs_ = lam idxs.
           seq_ (map (lam jis. utuple_ [int_ jis.0, seq_ (map int_ jis.1)]) idxs)
         in
         switch
           match
             partition
               (lam jis. leqf (int2float (length jis.1)) (mulf phi (int2float n)))
-              indxs
-            with (specIdxs, adIdxs)
+              idxs
+            with (sIdxs, dIdxs)
           in
           logDebug (lam.
-            strJoin " " [int2string (length adIdxs), "AD derivatives"]);
+            strJoin " " [int2string (length dIdxs), "AD derivatives"]);
           logDebug (lam.
             strJoin " "
-              [int2string (length specIdxs), "specialized partial derivatives"]);
-          (specIdxs, adIdxs)
-        -- case (specIdxs, []) then
-        --   app_
-        --     (foldLets
-        --        (peval
-        --           (nulams_ [_idxs]
-        --              (bind_ (nulet_ _jacc t)
-        --                 (seq_
-        --                    (let args = [] in [
-        --                      seq_ [],
-        --                      appSeq_ (nvar_ _jacc) (cons (idxs specIdxs) args)
-        --                    ]))))))
-        --     (idxs adIdxs)
-        case (specIdxs, adIdxs) then
+              [int2string (length sIdxs), "specialized partial derivatives"]);
+          (sIdxs, dIdxs)
+        case (sIdxs, []) then
+          constantfoldLets
+            (peval
+               (let yyp = (unzip dae.vars).0 in
+                nulams_ yyp
+                  (bind_ (nulet_ _jacc t)
+                     (seq_
+                        (let args = map nvar_ yyp in [
+                          seq_ [],
+                          appSeq_ (nvar_ _jacc) (cons (idxs_ sIdxs) args)
+                        ])))))
+        case (sIdxs, dIdxs) then
           app_
-            (foldLets
+            (constantfoldLets
                (peval
                   (let yyp = (unzip dae.vars).0 in
                    nulams_ (cons _idxs yyp)
@@ -543,9 +559,9 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold
                         (seq_
                            (let args = map nvar_ yyp in [
                              appSeq_ (nvar_ _jacc) (cons (nvar_ _idxs) args),
-                             appSeq_ (nvar_ _jacc) (cons (idxs specIdxs) args)
+                             appSeq_ (nvar_ _jacc) (cons (idxs_ sIdxs) args)
                            ]))))))
-            (idxs adIdxs)
+            (idxs_ dIdxs)
         end
       else
         error (errMsg "Not a first-order DAE" (TmDAE dae))
@@ -556,36 +572,25 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold
   sem daeGenMixedJacYp : Float -> TmDAERec -> Expr
   sem daeGenMixedJacYp phi =| dae -> _daeGenMixedJac false phi dae
 
-  sem foldLets : Expr -> Expr
-  sem foldLets =| t ->
-    match analyseLets (mapEmpty nameCmp, mapEmpty nameCmp) t with (_, subs) in
-    recursive let inner = lam t.
-      switch t
-      case TmVar r then
-        optionMapOr t inner (mapLookup r.ident subs)
-      case TmLet r then
-        if optionIsSome (mapLookup r.ident subs) then
-          inner r.inexpr
-        else smap_Expr_Expr inner t
-      case t then
-        smap_Expr_Expr inner t
-      end
+  sem _daeGenADJac : Bool -> TmDAERec -> Expr
+  sem _daeGenADJac jacY =| dae ->
+    let idxs =
+      let s = daeJacStructure dae in
+      let s = if jacY then s.0 else  s.1 in
+      daeJacStructureToIdxSeq s
     in
-    inner t
+    let idxs =
+      seq_ (map (lam jis. utuple_ [int_ jis.0, seq_ (map int_ jis.1)]) idxs)
+    in
+    let t = _daeGenJac jacY dae in
+    let yyp = (unzip dae.vars).0 in
+    nulams_ yyp (seq_ [seq_ [], appSeq_ t (cons idxs (map nvar_ yyp))])
 
-  sem analyseLets
-    : (Map Name Int, Map Name Expr) -> Expr -> (Map Name Int, Map Name Expr)
-  sem analyseLets acc =
-  | TmVar r ->
-    (mapUpdate r.ident
-       (optionMapOr (Some 1) (lam count. Some (succ count))) acc.0,
-     acc.1)
-  | TmLet r ->
-    match acc with (count, subs) in
-    if lti (optionGetOr 0 (mapLookup r.ident count)) 2 then
-      (count, mapInsert r.ident r.body subs)
-    else acc
-  | t -> sfold_Expr_Expr analyseLets acc t
+  sem daeGenADJacY : TmDAERec -> Expr
+  sem daeGenADJacY =| dae -> _daeGenADJac true dae
+
+  sem daeGenADJacYp : TmDAERec -> Expr
+  sem daeGenADJacYp =| dae -> _daeGenADJac false dae
 end
 
 lang TestLang = DAE + DAEParseAnalysis + DAEParseDesugar + MExprConstantFold end
@@ -599,7 +604,7 @@ mexpr
 use TestLang in
 
 let _parseExpr = lam prog.
-  (typeCheck (adSymbolize (parseDAEExprExn prog)))
+  (daeTypeCheck (daeSymbolize (parseDAEExprExn prog)))
 in
 
 let _parseAsTmDAE = lam prog.
@@ -612,7 +617,7 @@ let _parseDAEProg = lam prog.
   logMsg logLevel.debug
     (lam. strJoin "\n" ["Input program:", daeProgToString prog]);
 
-  match typeCheck (adSymbolize (TmDAE (daeDesugarProg prog))) with TmDAE r
+  match daeTypeCheck (daeSymbolize (TmDAE (daeDesugarProg prog))) with TmDAE r
   then r else error "Impossible"
 in
 
@@ -1263,53 +1268,57 @@ let expected = _parseExpr "
 lam idxs. lam y. lam yp.
   foldl
     (lam acc. lam jis.
-      (foldl
-         (lam acc. lam i.
-           cons
-             ((i, jis.0),
-              get [
-                lam dy. lam.
-                  negf
-                    (addf
-                       (mulf (get y 0) (get dy 4))
-                       (mulf (get dy 0) (get y 4))),
-                lam dy. lam.
-                  negf
-                    (addf
-                       (mulf (get y 2) (get dy 4))
-                       (mulf (get dy 2) (get y 4))),
-                lam dy. lam.
-                  addf
-                    (addf
-                       (addf
-                          (mulf (get dy 0) (get yp 1))
-                          (mulf 2.
-                             (addf
-                                (mulf (get y 1) (get dy 1))
-                                (mulf (get dy 1) (get y 1)))))
-                       (mulf (get yp 1) (get dy 0)))
-                    (addf
-                       (addf
-                          (mulf (get dy 2) (get yp 3))
-                          (mulf 2.
-                             (addf
-                                (mulf (get y 3) (get dy 3))
-                                (mulf (get dy 3) (get y 3)))))
-                       (mulf (get yp 3) (get dy 2))),
-                lam dy. lam. get dy 1,
-                lam dy. lam. get dy 3
-              ]
-                i
-                (onehot 5 jis.0))
-             acc)
-         acc
-         jis.1))
+      foldl
+        (lam acc. lam i.
+          cons
+            ((i, jis.0),
+             get [
+               lam dy. lam.
+                 negf
+                   (addf
+                      (mulf (get y 0) (get dy 4))
+                      (mulf (get dy 0) (get y 4))),
+               lam dy. lam .
+                 negf
+                   (addf
+                      (mulf (get y 2) (get dy 4))
+                      (mulf (get dy 2) (get y 4))),
+               lam dy. lam.
+                 addf
+                   (addf
+                      (addf
+                         (mulf (get dy 0) (get yp 1))
+                         (mulf 2.
+                            (addf
+                               (mulf (get y 1) (get dy 1))
+                               (mulf (get dy 1) (get y 1)))))
+                      (mulf (get yp 1) (get dy 0)))
+                   (addf
+                      (addf
+                         (mulf (get dy 2) (get yp 3))
+                         (mulf 2.
+                            (addf
+                               (mulf (get y 3) (get dy 3))
+                               (mulf (get dy 3) (get y 3)))))
+                      (mulf (get yp 3) (get dy 2))),
+               lam dy. lam. get dy 1,
+               lam dy. lam. get dy 3
+             ]
+               i
+               (onehot 5 jis.0))
+            acc)
+        acc
+        jis.1)
     []
     idxs
   "
 in
 let actual = constantfoldLets (peval (daeGenJacY daer)) in
 utest expected with actual using eqExpr in
+logSetLogLevel logLevel.error;
+logMsg logLevel.debug (lam. strJoin "\n" ["jacYp expected:", expr2str expected]);
+logMsg logLevel.debug (lam. strJoin "\n" ["jacYp actual:", expr2str actual]);
+logSetLogLevel logLevel.error;
 
 ----------------------------------------------
 -- Test: Specialize all partial derivatives --

@@ -45,8 +45,9 @@ type DAEJacf = [Float] -> [Float] -> [DAEJacVals]
 type DAEOutf = [Float] -> [Float] -> ()
 
 let daeRuntimeRun
-  : Bool -> Bool -> [Bool] -> DAEInit -> DAEResf -> DAEJacf -> DAEJacf -> DAEOutf -> ()
-  = lam debug. lam numjac. lam varids. lam initVals. lam resf. lam jacYf. lam jacYpf. lam outf.
+  : Bool -> Bool -> Bool -> [Bool] -> DAEInit -> DAEResf -> DAEJacf -> DAEJacf -> DAEOutf -> ()
+  = lam debug. lam outputOnlyLast. lam numjac.
+    lam varids. lam initVals. lam resf. lam jacYf. lam jacYpf. lam outf.
     modref _debug debug;
     -- Parse arguments
     let args =
@@ -134,12 +135,13 @@ let daeRuntimeRun
     recursive let recur = lam t.
       let y = create n (vget y) in
       let yp = create n (vget yp) in
-      outf y yp;
+      (if outputOnlyLast then () else outf y yp);
       if gtf t interv then ()
       else
         switch idaSolveNormal s { tend = addf t stepsize, y = v, yp = vp }
         case (tend, IdaSuccess _) then recur tend
-        case (_, IdaStopTimeReached _) then ()
+        case (_, IdaStopTimeReached _) then
+          (if outputOnlyLast then outf y yp else ())
         case (tend, IdaRootsFound _) then
           printError (join ["Roots found at t = ", float2string tend]);
           flushStderr ()

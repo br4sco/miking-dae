@@ -1,11 +1,13 @@
-MODELS_NUMERIC_JAC := harmonic.dae pendulum.dae lrc.dae body.dae pendulum-3d.dae furuta.dae cauer.dae
-MODELS_GEN_JAC := harmonic.dae pendulum.dae lrc.dae pendulum-3d.dae furuta.dae cauer.dae
-OKS := $(MODELS_NUMERIC_JAC:.dae=-numjac.OK) $(MODELS_GEN_JAC:.dae=-1.OK) $(MODELS_GEN_JAC:.dae=-09.OK) $(MODELS_GEN_JAC:.dae=-08.OK) $(MODELS_GEN_JAC:.dae=-07.OK) $(MODELS_GEN_JAC:.dae=-06.OK) $(MODELS_GEN_JAC:.dae=-05.OK) $(MODELS_GEN_JAC:.dae=-04.OK) $(MODELS_GEN_JAC:.dae=-03.OK) $(MODELS_GEN_JAC:.dae=-02.OK) $(MODELS_GEN_JAC:.dae=-01.OK) $(MODELS_GEN_JAC:.dae=-00.OK)
+TOOL_NAME=peadae
+
+MODELS_NUMERIC_JAC := harmonic.dae pendulum.dae lrc.dae body.dae pendulum_3d.dae furuta.dae cauer.dae
+
+OKS := $(MODELS_NUMERIC_JAC:.dae=-numjac.OK) $(MODELS_NUMERIC_JAC:.dae=-ad.OK) $(MODELS_NUMERIC_JAC:.dae=-0.OK) harmonic-1.OK harmonic-2.OK pendulum-1.OK pendulum-2.OK pendulum-3.OK lrc-1.OK lrc-2.OK lrc-3.OK lrc-4.OK body-1.OK body-2.OK body-3.OK body-4.OK body-5.OK body-6.OK body-7.OK pendulum_3d-1.OK pendulum_3d-2.OK pendulum_3d-3.OK pendulum_3d-4.OK pendulum_3d-5.OK pendulum_3d-7.OK pendulum_3d-8.OK pendulum_3d-9.OK furuta-1.OK furuta-2.OK furuta-3.OK furuta-4.OK furuta-5.OK furuta-6.OK furuta-7.OK furuta-8.OK furuta-9.OK furuta-10.OK cauer-1.OK cauer-2.OK
 
 EXES := $(OKS:.OK=.exe)
 MCS := $(OKS:.OK=.mc)
 
-PEADAE_SPEC := ../peadae.exe --debug-compilation --jac-spec-threshold
+PEADAE_SPEC := ../build/${TOOL_NAME} --debug-compilation --output-only-last --cse --jac-spec-absolute
 
 .PHONY: test clean
 
@@ -25,54 +27,51 @@ test: $(OKS) $(EXES) $(MCS)
 	@mi compile --output $@ $<
 
 %.out: %.exe
-	@./$< 10 1 | tail -n 1 > $@
+	@./$< 20 1 | tail -n 1 > $@
 
 %.out.expected: %.dae
-	../peadae.exe --numeric-jac $< > $<.mc && mi compile --output $<.exe $<.mc && ./$<.exe 10 1 | tail -n 1 > $@
+	../build/${TOOL_NAME} --output-only-last --numeric-jac $< > $<.mc && mi compile --output $<.exe $<.mc && ./$<.exe 20 1 > $@
 
-expected: $(MODELS:.dae=.out.expected) pendulum-3d.out.expected
+expected: $(MODELS_NUMERIC_JAC:.dae=.out.expected)
 
 clean:
 	rm -rf *.exe *.out *.mc *.OK
 
+%-0.mc: %.dae
+	@$(PEADAE_SPEC) 0 $< > $@
+
 %-1.mc: %.dae
 	@$(PEADAE_SPEC) 1 $< > $@
 
-%-09.mc: %.dae
-	@$(PEADAE_SPEC) 0.09 $< > $@
+%-2.mc: %.dae
+	@$(PEADAE_SPEC) 2 $< > $@
 
-%-08.mc: %.dae
-	@$(PEADAE_SPEC) 0.08 $< > $@
+%-3.mc: %.dae
+	@$(PEADAE_SPEC) 3 $< > $@
 
-%-07.mc: %.dae
-	@$(PEADAE_SPEC) 0.07 $< > $@
+%-4.mc: %.dae
+	@$(PEADAE_SPEC) 4 $< > $@
 
-%-06.mc: %.dae
-	@$(PEADAE_SPEC) 0.06 $< > $@
+%-5.mc: %.dae
+	@$(PEADAE_SPEC) 5 $< > $@
 
-%-05.mc: %.dae
-	@$(PEADAE_SPEC) 0.05 $< > $@
+%-6.mc: %.dae
+	@$(PEADAE_SPEC) 6 $< > $@
 
-%-04.mc: %.dae
-	@$(PEADAE_SPEC) 0.04 $< > $@
+%-7.mc: %.dae
+	@$(PEADAE_SPEC) 7 $< > $@
 
-%-03.mc: %.dae
-	@$(PEADAE_SPEC) 0.03 $< > $@
+%-8.mc: %.dae
+	@$(PEADAE_SPEC) 8 $< > $@
 
-%-02.mc: %.dae
-	@$(PEADAE_SPEC) 0.02 $< > $@
+%-9.mc: %.dae
+	@$(PEADAE_SPEC) 9 $< > $@
 
-%-01.mc: %.dae
-	@$(PEADAE_SPEC) 0.01 $< > $@
-
-%-00.mc: %.dae
-	@$(PEADAE_SPEC) 0 $< > $@
+%-10.mc: %.dae
+	@$(PEADAE_SPEC) 10 $< > $@
 
 %-numjac.mc: %.dae
-	@../peadae.exe --debug-compilation --numeric-jac $< > $@
+	@../build/${TOOL_NAME} --debug-compilation --output-only-last --cse --numeric-jac $< > $@
 
-%-opt_numjac.mc: %.dae
-	@../peadae.exe --debug-compilation --cse --constant-fold --numeric-jac $< > $@
-
-%-00-debug.mc: %.dae
-	@../peadae.exe --debug-compilation --debug-runtime --jac-spec-threshold 0 $< > $@
+%-ad.mc: %.dae
+	@../build/${TOOL_NAME} --debug-compilation --output-only-last --cse --disable-peval $< > $@
