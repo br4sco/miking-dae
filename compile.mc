@@ -45,7 +45,14 @@ lang DAECompile =
       in
       let runtime = symbolize runtime in
       let runtimeNames = concat (mapKeys daeBuiltins) [
-        "daeRuntimeRun", "sin", "cos", "exp", "pow", "sqrt"
+        "daeRuntimeRun",
+        "daeRuntimeBenchmarkRes",
+        "daeRuntimeBenchmarkJac",
+        "sin",
+        "cos",
+        "exp",
+        "pow",
+        "sqrt"
       ] in
       let runtimeNames =
         foldl2
@@ -139,20 +146,48 @@ lang DAECompile =
       let _jacYpf = nameSym "jacYpf" in
       let _outf = nameSym "outf" in
       let t =
-        bindall_[
-          nulet_ _varids (seq_ (map bool_ isdiffvars)),
-          nulet_ _initVals iexpr,
-          nulet_ _resf rexpr,
-          nulet_ _jacYf jacY,
-          nulet_ _jacYpf jacYp,
-          nulet_ _outf oexpr,
-          appSeq_ (nvar_ (mapFindExn "daeRuntimeRun" runtimeNames))
-            (cons
-               (bool_ options.numericJac)
-               (map nvar_ [_varids, _initVals, _resf, _jacYf, _jacYpf, _outf]))
-        ]
+        let n = length isdiffvars in
+        switch (options.benchmarkResidual, options.benchmarkJacobian)
+        case (true, false) then
+          bind_ (nulet_ _resf rexpr)
+            (appSeq_
+               (nvar_ (mapFindExn "daeRuntimeBenchmarkRes" runtimeNames))
+               [
+                 int_ n,
+                 (nvar_ _resf)
+               ])
+        case (false, true) then
+          bindall_ [
+            nulet_ _jacYf jacY,
+            nulet_ _jacYpf jacYp,
+            (appSeq_
+               (nvar_ (mapFindExn "daeRuntimeBenchmarkJac" runtimeNames))
+               [
+                 int_ n,
+                 (nvar_ _jacYf),
+                 (nvar_ _jacYpf)
+               ])
+          ]
+        case (true, true) then error "Unimplemented"
+        case (false, false) then
+          let t =
+            bindall_[
+              nulet_ _varids (seq_ (map bool_ isdiffvars)),
+              nulet_ _initVals iexpr,
+              nulet_ _resf rexpr,
+              nulet_ _jacYf jacY,
+              nulet_ _jacYpf jacYp,
+              nulet_ _outf oexpr,
+              appSeq_ (nvar_ (mapFindExn "daeRuntimeRun" runtimeNames))
+                (cons
+                   (bool_ options.numericJac)
+                   (map nvar_
+                      [_varids, _initVals, _resf, _jacYf, _jacYpf, _outf]))
+            ]
+          in
+          adBuiltinConstsToSyms t
+        end
       in
-      let t = adBuiltinConstsToSyms t in
       let t =
         substituteIdentifiers
           (mapFromSeq
