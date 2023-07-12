@@ -68,6 +68,12 @@ lang DAECompile =
           int2string
             (maxOrElse (lam. error "impossible") subi analysis.eqnsOffset)
         ]);
+      logDebug "analysis"
+        (lam. strJoin " " [
+          "number differentiated equations",
+          int2string
+            (length (filter (neqi 0) analysis.eqnsOffset))
+        ]);
       -- let daer = if options.cse then daeDestructiveCSE daer else daer in
       let daer = daeIndexReduce analysis.eqnsOffset daer in
       let state = daeFirstOrderState analysis.varOffset in
@@ -126,18 +132,25 @@ lang DAECompile =
         with (jacY, jacYp)
       in
       -- Generate runtime
+      let _varids = nameSym "varids" in
+      let  _initVals = nameSym "initVals" in
+      let _resf = nameSym "resf" in
+      let _jacYf = nameSym "jacYf" in
+      let _jacYpf = nameSym "jacYpf" in
+      let _outf = nameSym "outf" in
       let t =
-        (appSeq_ (nvar_ (mapFindExn "daeRuntimeRun" runtimeNames)) [
-          (bool_ options.debugRuntime),
-          (bool_ options.outputOnlyLast),
-          (bool_ options.numericJac),
-          seq_ (map bool_ isdiffvars),
-          iexpr,
-          rexpr,
-          jacY,
-          jacYp,
-          oexpr
-        ])
+        bindall_[
+          nulet_ _varids (seq_ (map bool_ isdiffvars)),
+          nulet_ _initVals iexpr,
+          nulet_ _resf rexpr,
+          nulet_ _jacYf jacY,
+          nulet_ _jacYpf jacYp,
+          nulet_ _outf oexpr,
+          appSeq_ (nvar_ (mapFindExn "daeRuntimeRun" runtimeNames))
+            (cons
+               (bool_ options.numericJac)
+               (map nvar_ [_varids, _initVals, _resf, _jacYf, _jacYpf, _outf]))
+        ]
       in
       let t = adBuiltinConstsToSyms t in
       let t =

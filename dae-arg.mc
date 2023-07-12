@@ -1,8 +1,7 @@
 include "arg.mc"
 
 type Options = {
-  debugCompilation : Bool,
-  debugRuntime : Bool,
+  debug : Bool,
   disableDebugStructure : Bool,
   disablePeval : Bool,
   constantFold : Bool,
@@ -10,13 +9,11 @@ type Options = {
   aliasElim : Bool,
   numericJac : Bool,
   jacSpecThreshold : Float,
-  jacSpecThresholdAbsolute : Option Int,
-  outputOnlyLast : Bool
+  jacSpecThresholdAbsolute : Option Int
 }
 
 let defaultOptions = {
-  debugCompilation = false,
-  debugRuntime = false,
+  debug = false,
   disableDebugStructure = false,
   disablePeval = false,
   constantFold = false,
@@ -24,17 +21,13 @@ let defaultOptions = {
   aliasElim = false,
   numericJac = false,
   jacSpecThreshold = 1.,
-  jacSpecThresholdAbsolute = None (),
-  outputOnlyLast = true
+  jacSpecThresholdAbsolute = None ()
 }
 
 let argConfig = [
-  ([("--debug-compilation", "", "")],
+  ([("--debug", "", "")],
    "Print debug information during compilation. ",
-   lam p. { p.options with debugCompilation = true }),
-  ([("--debug-runtime", "", "")],
-   "Print debug information during runtime. ",
-   lam p. { p.options with debugRuntime = true }),
+   lam p. { p.options with debug = true }),
   ([("--disable-peval", "", "")],
    "Disable partial evaluation. ",
    lam p. { p.options with disablePeval = true }),
@@ -55,10 +48,7 @@ let argConfig = [
    lam p. { p.options with jacSpecThreshold = argToFloatInterval p 0. 1. }),
   ([("--jac-spec-absolute", " ", "<value>")],
    "The maximum number non-zero elements a partial derivative in the Jacobian must in order to be specialized. Overrides --jac-spec-threshold. ",
-   lam p. { p.options with jacSpecThresholdAbsolute = Some (argToInt p) }),
-  ([("--output-only-last", "", "")],
-   "Only output the last time-step to standard out. ",
-   lam p. { p.options with outputOnlyLast = true })
+   lam p. { p.options with jacSpecThresholdAbsolute = Some (argToInt p) })
 ]
 
 let usage = lam prog. join [

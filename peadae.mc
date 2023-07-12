@@ -27,7 +27,7 @@ case ParseOK r then
     print (usage (get argv 0));
     exit 1
   else
-    (if r.options.debugCompilation then logSetLogLevel logLevel.debug else ());
+    (if r.options.debug then logSetLogLevel logLevel.debug else ());
     let res =
       let filename = head r.strings in
       logMsg logLevel.debug (lam. strJoin " " ["compiling", filename]);
