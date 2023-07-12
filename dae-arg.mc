@@ -9,7 +9,9 @@ type Options = {
   aliasElim : Bool,
   numericJac : Bool,
   jacSpecThreshold : Float,
-  jacSpecThresholdAbsolute : Option Int
+  jacSpecThresholdAbsolute : Option Int,
+  benchmarkResidual : Bool,
+  benchmarkJacobian : Bool
 }
 
 let defaultOptions = {
@@ -21,7 +23,9 @@ let defaultOptions = {
   aliasElim = false,
   numericJac = false,
   jacSpecThreshold = 1.,
-  jacSpecThresholdAbsolute = None ()
+  jacSpecThresholdAbsolute = None (),
+  benchmarkResidual = false,
+  benchmarkJacobian = false
 }
 
 let argConfig = [
@@ -48,7 +52,13 @@ let argConfig = [
    lam p. { p.options with jacSpecThreshold = argToFloatInterval p 0. 1. }),
   ([("--jac-spec-absolute", " ", "<value>")],
    "The maximum number non-zero elements a partial derivative in the Jacobian must in order to be specialized. Overrides --jac-spec-threshold. ",
-   lam p. { p.options with jacSpecThresholdAbsolute = Some (argToInt p) })
+   lam p. { p.options with jacSpecThresholdAbsolute = Some (argToInt p) }),
+    ([("--benchmark-res", "", "")],
+   "Do not simulate but instead evaluate the residual function the given number of times. ",
+   lam p. { p.options with benchmarkResidual = true }),
+  ([("--benchmark-jac", "", "")],
+   "Do not simulate but instead evaluate the jacobian function the given number of times. ",
+   lam p. { p.options with benchmarkJacobian = true })
 ]
 
 let usage = lam prog. join [
