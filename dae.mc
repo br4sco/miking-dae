@@ -7,7 +7,6 @@ include "mexpr/constant-fold.mc"
 include "./desugar.mc"
 include "./daecore-structure.mc"
 include "./lib/vec.mc"
-include "./built-in.mc"
 
 let _daeIDMap = ref (mapEmpty (tupleCmp2 nameCmp subi))
 let daeID : (Name, Int) -> Name
@@ -608,7 +607,7 @@ mexpr
 use TestLang in
 
 let _parseExpr = lam prog.
-  (daeTypeCheck (daeSymbolize (parseDAEExprExn prog)))
+  (typeCheck (symbolize (parseDAEExprExn prog)))
 in
 
 let _parseAsTmDAE = lam prog.
@@ -621,7 +620,7 @@ let _parseDAEProg = lam prog.
   logMsg logLevel.debug
     (lam. strJoin "\n" ["Input program:", daeProgToString prog]);
 
-  match daeTypeCheck (daeSymbolize (TmDAE (daeDesugarProg prog))) with TmDAE r
+  match typeCheck (symbolize (TmDAE (daeDesugarProg prog))) with TmDAE r
   then r else error "Impossible"
 in
 

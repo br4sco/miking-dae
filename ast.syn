@@ -24,7 +24,10 @@ prod Int: DAEConst = val:Int
 prod True: DAEConst = "true"
 prod False: DAEConst = "false"
 prod Pred: DAEConst = "pred"
--- prod Exp: DAEConst = "exp"
+prod Exp: DAEConst = "exp"
+prod Sin: DAEConst = "sin"
+prod Cos: DAEConst = "cos"
+prod Sqrt: DAEConst = "sqrt"
 
 -- Patterns
 prod TupleDAEPat: DAEPat = "{" (names:LName ("," names:LName)*)? "}"

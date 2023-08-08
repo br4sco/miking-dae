@@ -6,11 +6,11 @@ include "mexpr/ast-builder.mc"
 include "mexpr/utils.mc"
 include "mexpr/symbolize.mc"
 include "mexpr/cse.mc"
+include "mexpr/const-transformer.mc"
 
 include "./dae.mc"
 include "./desugar.mc"
 include "./dae-arg.mc"
-include "./built-in.mc"
 
 let peadaeNameSpace = "PEADAE"
 
@@ -32,7 +32,7 @@ lang DAECompile =
     let logDebug = lam head. lam msg.
       logDebug (lam. strJoin "\n" [join ["daeCompile:", head, ":"], msg ()])
     in
-    match daeTypeCheck (adBuiltinSymsToConsts (daeSymbolize (TmDAE daer))) with
+    match typeCheck (symbolize (TmDAE daer)) with
       TmDAE daer
     then
       -- Setup runtime
@@ -44,7 +44,7 @@ lang DAECompile =
         } (join [daeSrcPathExn (), "/runtime.mc"])
       in
       let runtime = symbolize runtime in
-      let runtimeNames = concat (mapKeys daeBuiltins) [
+      let runtimeNames = [
         "daeRuntimeRun",
         "daeRuntimeBenchmarkRes",
         "daeRuntimeBenchmarkJac",
@@ -52,7 +52,8 @@ lang DAECompile =
         "cos",
         "exp",
         "pow",
-        "sqrt"
+        "sqrt",
+        "onehot"
       ] in
       let runtimeNames =
         foldl2
@@ -185,18 +186,25 @@ lang DAECompile =
                       [_varids, _initVals, _resf, _jacYf, _jacYpf, _outf]))
             ]
           in
-          adBuiltinConstsToSyms t
+          let env =
+            foldl
+              (lam env. lam x. match x with (str, c) in
+                           mapInsert c (mapFindExn str runtimeNames) env)
+              (mapEmpty cmpConst)
+              (adBuiltin ())
+          in
+          constTransformConstsToVars env t
         end
       in
-      let t =
-        substituteIdentifiers
-          (mapFromSeq
-             nameCmp
-             (map
-                (lam x. (x.1, mapFindExn x.0 runtimeNames))
-                (concat adBuiltinSymbols (mapBindings daeBuiltins))))
-          t
-      in
+      -- let t =
+      --   substituteIdentifiers
+      --     (mapFromSeq
+      --        nameCmp
+      --        (map
+      --           (lam x. (x.1, mapFindExn x.0 runtimeNames))
+      --           (concat adBuiltinSymbols (mapBindings daeBuiltins))))
+      --     t
+      -- in
       bind_ runtime t
     else error "impossible"
 end
@@ -212,7 +220,7 @@ let _parse = lam prog.
   logMsg logLevel.debug
     (lam. strJoin "\n" ["Input program:", daeProgToString prog]);
   let daer = daeDesugarProg prog in
-  match typeCheck (adSymbolize (TmDAE daer)) with TmDAE daer then
+  match typeCheck (symbolize (TmDAE daer)) with TmDAE daer then
     daer
   else error "impossible"
 in
@@ -246,6 +254,6 @@ let t = daeCompile defaultOptions dae in
 logMsg logLevel.debug
   (lam. strJoin "\n" ["Output program:", expr2str t]);
 
-utest typeCheck (adSymbolize t); true with true in
+utest typeCheck (symbolize t); true with true in
 
 ()

@@ -13,7 +13,6 @@ include "error.mc"
 include "tuple.mc"
 
 include "./ast_gen.mc"
-include "./built-in.mc"
 include "../miking-pead/ad.mc"
 
 type Res a = Result ErrorSection ErrorSection a
@@ -225,10 +224,6 @@ lang DAEAst = DAEParseAst + AstResult +
     else error "Impossible"
   | TmDAE r -> TmDAE (_tmToTmDAERec (symbolizeExpr env (_tmDAERecToTm r)))
 
-  sem daeSymbolize : Expr -> Expr
-  sem daeSymbolize =| t ->
-    adSymbolizeExpr { symEnvEmpty with varEnv = daeBuiltins } t
-
   -- Type Check
   sem typeCheckExpr env =
   | TmDVar r ->
@@ -237,10 +232,6 @@ lang DAEAst = DAEParseAst + AstResult +
       TmDVar (tmDVarRecToTmVarRec order varr)
     else error "impossible"
   | TmDAE r -> TmDAE (_tmToTmDAERec (typeCheckExpr env (_tmDAERecToTm r)))
-
-  sem daeTypeCheck : Expr -> Expr
-  sem daeTypeCheck =| t ->
-    typeCheckExpr { _tcEnvEmpty with varEnv = daeTCVarEnv } t
 
   -- Parse
   sem parseDAEExprExn : String -> Expr

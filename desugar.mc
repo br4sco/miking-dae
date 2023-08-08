@@ -23,6 +23,10 @@ lang DAEParseDesugar = DAEAst
   | IntDAEConst r -> CInt { val = r.val.v }
   | TrueDAEConst _ -> CBool { val = true }
   | FalseDAEConst _ -> CBool { val = false }
+  | SinDAEConst _ -> CSin {}
+  | CosDAEConst _ -> CCos {}
+  | SqrtDAEConst _ -> CSqrt {}
+  | ExpDAEConst _ -> CExp {}
 
   sem daeDesugarPat : DAEPat -> Pat
   sem daeDesugarPat =
@@ -454,7 +458,7 @@ let parseDAEProg = lam prog.
   prog
 in
 
-let parseDAEExprExn = lam prog. typeCheck (adSymbolize (parseDAEExprExn prog)) in
+let parseDAEExprExn = lam prog. typeCheck (symbolize (parseDAEExprExn prog)) in
 
 logSetLogLevel logLevel.error;
 
@@ -509,7 +513,7 @@ let expectedExpr = parseDAEExprExn "
 in
 
 let daer = daeDesugarProg prog in
-match typeCheck (adSymbolize (TmDAE daer)) with TmDAE daer then
+match typeCheck (symbolize (TmDAE daer)) with TmDAE daer then
   logSetLogLevel logLevel.error;
   logMsg logLevel.debug
     (lam. strJoin "\n" ["Output program:", expr2str (TmDAE daer)]);
