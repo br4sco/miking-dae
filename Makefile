@@ -10,7 +10,7 @@ test: $(TESTS)
 
 test-compiled: $(TESTBINS)
 
-test-examples: peadae.exe
+test-examples:
 	$(MAKE) test -C examples
 
 test-all: test test-examples

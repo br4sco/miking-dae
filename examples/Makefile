@@ -15,8 +15,8 @@ test: $(OKS) $(EXES) $(MCS)
 	@f=$<; \
 	echo -n $$f; \
 	if cat $$f $${f%-*}.out.expected | ./compare; then \
+		touch $@; \
 		echo " OK"; \
-		touch $@ \
 	else \
 		echo " FAIL"; \
 	fi \
