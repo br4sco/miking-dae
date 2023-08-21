@@ -252,195 +252,195 @@ lang DAEParseDesugar = DAEAst
       info = r.info
     }
 
-  sem daeResugarExpr : Expr -> Option DAEExpr
-  sem daeResugarExpr =
-  | TmVar r ->
-    let i = r.info in
-    Some (VarDAEExpr { info = i, name = { i = i, v = r.ident } })
-  | TmLam r ->
-    let i = r.info in
-    optionBind (daeResugarExpr r.body) (lam body.
-      Some
-        (AbsDAEExpr { body = body, info = i, name = { i = i, v = r.ident } }))
-  | TmApp {
-    lhs = TmApp {
-      lhs = TmConst { val = c, info = info },
-      rhs = left
-    },
-    rhs = right,
-    info = info
-  } ->
-    optionBind (daeResugarExpr left) (lam left.
-      optionBind (daeResugarExpr right) (lam right.
-        daeResugarBinOp { info = info, left = left, right = right } c))
-  | TmApp {
-    lhs = TmConst { val = c, info = info },
-    rhs = right,
-    info = info
-  } ->
-    optionBind (daeResugarExpr right) (lam right.
-      daeResugarUnOp { info = info, right = right } c)
-  | TmApp r ->
-    optionBind (daeResugarExpr r.lhs) (lam lhs.
-      optionBind (daeResugarExpr r.rhs) (lam rhs.
-        Some (AppDAEExpr { fn = lhs, arg = rhs, info = r.info })))
-  | TmRecord r ->
-    optionMap
-      (lam exprs. TupleDAEExpr { info = r.info, exprs = exprs })
-      ((optionCompose
-          (optionMapM daeResugarExpr)
-          record2tuple)
-         r.bindings)
-  | TmConst r ->
-    optionBind (daeResugarConst r.info r.val) (lam val.
-      Some (ConstDAEExpr { val = val, info = r.info }))
-  | TmLet r ->
-    let i = r.info in
-    optionBind (daeResugarExpr r.body) (lam arg.
-      optionBind (daeResugarExpr r.inexpr) (lam body.
-        Some
-          (LetDAEExpr {
-            arg = arg,
-            body = body,
-            info = i,
-            name = { i = i, v = r.ident }
-          })))
-  | TmRecLets (r & { bindings = [binding] }) ->
-    optionBind (daeResugarExpr binding.body) (lam arg.
-      optionBind (daeResugarExpr r.inexpr) (lam body.
-        Some
-          (RecLetDAEExpr {
-            arg = arg,
-            body = body,
-            info = r.info,
-            name = { i = r.info, v = binding.ident }
-          })))
-  | TmMatch {
-    info = info,
-    target = target,
-    pat = pat & !(PatBool { val = true }),
-    thn = thn,
-    els = TmNever _
-  } ->
-    optionBind (daeResugarExpr target) (lam target.
-      optionBind (daeResugarPat pat) (lam pat.
-        optionBind (daeResugarExpr thn) (lam body.
-          Some
-            (MatchInDAEExpr {
-              pat = pat,
-              body = body,
-              info = info,
-              target = target}))))
-  | TmMatch {
-    info = info,
-    target = target,
-    pat = pat & PatRecord {bindings = bindings},
-    thn = thn & TmVar {ident = exprName},
-    els = TmNever _
-  } ->
-    optionBind (daeResugarExpr target) (lam target.
-      match matchIsProj bindings exprName with Some fieldLabel then
-        let str = sidToString fieldLabel in
-        if forAll isDigit str then
-          let n = string2int str in
-          Some
-            (ProjDAEExpr {
-              expr = target,
-              label = { v = n, i = info },
-              info = info
-            })
-        else None ()
-      else
-        optionBind (daeResugarPat pat) (lam pat.
-          optionBind (daeResugarExpr thn) (lam body.
-            Some
-              (MatchInDAEExpr {
-                pat = pat,
-                body = body,
-                info = info,
-                target = target}))))
-  | TmMatch {
-    info = info,
-    target = target,
-    pat = PatBool { val = true },
-    thn = thn,
-    els = els & !TmNever _
-  } ->
-    optionBind (daeResugarExpr target) (lam pred.
-      optionBind (daeResugarExpr thn) (lam thn.
-        optionBind (daeResugarExpr els) (lam els.
-          Some
-            (IfDAEExpr {
-              pred = pred,
-              thn = thn,
-              els = els,
-              info = info}))))
-  | _ -> None ()
+--   sem daeResugarExpr : Expr -> Option DAEExpr
+--   sem daeResugarExpr =
+--   | TmVar r ->
+--     let i = r.info in
+--     Some (VarDAEExpr { info = i, name = { i = i, v = r.ident } })
+--   | TmLam r ->
+--     let i = r.info in
+--     optionBind (daeResugarExpr r.body) (lam body.
+--       Some
+--         (AbsDAEExpr { body = body, info = i, name = { i = i, v = r.ident } }))
+--   | TmApp {
+--     lhs = TmApp {
+--       lhs = TmConst { val = c, info = info },
+--       rhs = left
+--     },
+--     rhs = right,
+--     info = info
+--   } ->
+--     optionBind (daeResugarExpr left) (lam left.
+--       optionBind (daeResugarExpr right) (lam right.
+--         daeResugarBinOp { info = info, left = left, right = right } c))
+--   | TmApp {
+--     lhs = TmConst { val = c, info = info },
+--     rhs = right,
+--     info = info
+--   } ->
+--     optionBind (daeResugarExpr right) (lam right.
+--       daeResugarUnOp { info = info, right = right } c)
+--   | TmApp r ->
+--     optionBind (daeResugarExpr r.lhs) (lam lhs.
+--       optionBind (daeResugarExpr r.rhs) (lam rhs.
+--         Some (AppDAEExpr { fn = lhs, arg = rhs, info = r.info })))
+--   | TmRecord r ->
+--     optionMap
+--       (lam exprs. TupleDAEExpr { info = r.info, exprs = exprs })
+--       ((optionCompose
+--           (optionMapM daeResugarExpr)
+--           record2tuple)
+--          r.bindings)
+--   | TmConst r ->
+--     optionBind (daeResugarConst r.info r.val) (lam val.
+--       Some (ConstDAEExpr { val = val, info = r.info }))
+--   | TmLet r ->
+--     let i = r.info in
+--     optionBind (daeResugarExpr r.body) (lam arg.
+--       optionBind (daeResugarExpr r.inexpr) (lam body.
+--         Some
+--           (LetDAEExpr {
+--             arg = arg,
+--             body = body,
+--             info = i,
+--             name = { i = i, v = r.ident }
+--           })))
+--   | TmRecLets (r & { bindings = [binding] }) ->
+--     optionBind (daeResugarExpr binding.body) (lam arg.
+--       optionBind (daeResugarExpr r.inexpr) (lam body.
+--         Some
+--           (RecLetDAEExpr {
+--             arg = arg,
+--             body = body,
+--             info = r.info,
+--             name = { i = r.info, v = binding.ident }
+--           })))
+--   | TmMatch {
+--     info = info,
+--     target = target,
+--     pat = pat & !(PatBool { val = true }),
+--     thn = thn,
+--     els = TmNever _
+--   } ->
+--     optionBind (daeResugarExpr target) (lam target.
+--       optionBind (daeResugarPat pat) (lam pat.
+--         optionBind (daeResugarExpr thn) (lam body.
+--           Some
+--             (MatchInDAEExpr {
+--               pat = pat,
+--               body = body,
+--               info = info,
+--               target = target}))))
+--   | TmMatch {
+--     info = info,
+--     target = target,
+--     pat = pat & PatRecord {bindings = bindings},
+--     thn = thn & TmVar {ident = exprName},
+--     els = TmNever _
+--   } ->
+--     optionBind (daeResugarExpr target) (lam target.
+--       match matchIsProj bindings exprName with Some fieldLabel then
+--         let str = sidToString fieldLabel in
+--         if forAll isDigit str then
+--           let n = string2int str in
+--           Some
+--             (ProjDAEExpr {
+--               expr = target,
+--               label = { v = n, i = info },
+--               info = info
+--             })
+--         else None ()
+--       else
+--         optionBind (daeResugarPat pat) (lam pat.
+--           optionBind (daeResugarExpr thn) (lam body.
+--             Some
+--               (MatchInDAEExpr {
+--                 pat = pat,
+--                 body = body,
+--                 info = info,
+--                 target = target}))))
+--   | TmMatch {
+--     info = info,
+--     target = target,
+--     pat = PatBool { val = true },
+--     thn = thn,
+--     els = els & !TmNever _
+--   } ->
+--     optionBind (daeResugarExpr target) (lam pred.
+--       optionBind (daeResugarExpr thn) (lam thn.
+--         optionBind (daeResugarExpr els) (lam els.
+--           Some
+--             (IfDAEExpr {
+--               pred = pred,
+--               thn = thn,
+--               els = els,
+--               info = info}))))
+--   | _ -> None ()
 
-  sem daeResugarUnOp
-    : {info : Info, right : DAEExpr} -> Const -> Option DAEExpr
-  sem daeResugarUnOp r =
-  | CNegf _ ->
-    Some
-      (SubDAEExpr {
-        left = ConstDAEExpr {
-          val = FloatDAEConst { val = { i = r.info, v = 0. }, info = r.info },
-          info = r.info
-        },
-        right = r.right,
-        info = r.info
-      })
-  | CSin _ -> daeResugarElemFunction r.info "sin" r.right
-  | CCos _ -> daeResugarElemFunction r.info "cos" r.right
-  | _ -> None ()
+--   sem daeResugarUnOp
+--     : {info : Info, right : DAEExpr} -> Const -> Option DAEExpr
+--   sem daeResugarUnOp r =
+--   | CNegf _ ->
+--     Some
+--       (SubDAEExpr {
+--         left = ConstDAEExpr {
+--           val = FloatDAEConst { val = { i = r.info, v = 0. }, info = r.info },
+--           info = r.info
+--         },
+--         right = r.right,
+--         info = r.info
+--       })
+--   | CSin _ -> daeResugarElemFunction r.info "sin" r.right
+--   | CCos _ -> daeResugarElemFunction r.info "cos" r.right
+--   | _ -> None ()
 
-  sem daeResugarElemFunction : Info -> String -> DAEExpr -> Option DAEExpr
-  sem daeResugarElemFunction info name =| arg ->
-    Some
-      (AppDAEExpr {
-        fn = VarDAEExpr {
-          info = info,
-          name = { i = info, v = nameNoSym name }
-        },
-        arg = arg,
-        info = info
-      })
+--   sem daeResugarElemFunction : Info -> String -> DAEExpr -> Option DAEExpr
+--   sem daeResugarElemFunction info name =| arg ->
+--     Some
+--       (AppDAEExpr {
+--         fn = VarDAEExpr {
+--           info = info,
+--           name = { i = info, v = nameNoSym name }
+--         },
+--         arg = arg,
+--         info = info
+--       })
 
-  sem daeResugarBinOp
-    : {info : Info, left : DAEExpr, right : DAEExpr} -> Const -> Option DAEExpr
-  sem daeResugarBinOp r =
-  | CAddf _ -> Some (AddDAEExpr r)
-  | CSubf _ -> Some (SubDAEExpr r)
-  | CMulf _ -> Some (MulDAEExpr r)
-  | CDivf _ -> Some (DivDAEExpr r)
-  | _ -> None ()
+--   sem daeResugarBinOp
+--     : {info : Info, left : DAEExpr, right : DAEExpr} -> Const -> Option DAEExpr
+--   sem daeResugarBinOp r =
+--   | CAddf _ -> Some (AddDAEExpr r)
+--   | CSubf _ -> Some (SubDAEExpr r)
+--   | CMulf _ -> Some (MulDAEExpr r)
+--   | CDivf _ -> Some (DivDAEExpr r)
+--   | _ -> None ()
 
-  sem daeResugarConst : Info -> Const -> Option DAEConst
-  sem daeResugarConst info =
-  | CFloat r ->
-    Some (FloatDAEConst { val = { i = info, v = r.val }, info = info })
-  | CInt r ->
-    Some (IntDAEConst { val = { i = info, v = r.val }, info = info })
-  | CBool r ->
-    if r.val then
-      Some (TrueDAEConst { info = info })
-    else
-      Some (FalseDAEConst { info = info })
-  | _ -> None ()
+--   sem daeResugarConst : Info -> Const -> Option DAEConst
+--   sem daeResugarConst info =
+--   | CFloat r ->
+--     Some (FloatDAEConst { val = { i = info, v = r.val }, info = info })
+--   | CInt r ->
+--     Some (IntDAEConst { val = { i = info, v = r.val }, info = info })
+--   | CBool r ->
+--     if r.val then
+--       Some (TrueDAEConst { info = info })
+--     else
+--       Some (FalseDAEConst { info = info })
+--   | _ -> None ()
 
-  sem daeResugarPat : Pat -> Option DAEPat
-  sem daeResugarPat =
-  | PatRecord r ->
-    optionMap (lam names. TupleDAEPat { info = r.info, names = names })
-      ((optionCompose
-          (optionMapM
-             (lam p.
-               match p with PatNamed {ident = PName v, info = i} then
-                 Some { i = i, v = v }
-               else None ()))
-          record2tuple)
-         r.bindings)
-  | _ -> None ()
+--   sem daeResugarPat : Pat -> Option DAEPat
+--   sem daeResugarPat =
+--   | PatRecord r ->
+--     optionMap (lam names. TupleDAEPat { info = r.info, names = names })
+--       ((optionCompose
+--           (optionMapM
+--              (lam p.
+--                match p with PatNamed {ident = PName v, info = i} then
+--                  Some { i = i, v = v }
+--                else None ()))
+--           record2tuple)
+--          r.bindings)
+--   | _ -> None ()
 end
 
 lang TestLang = DAEParseAnalysis + DAEParseDesugar end

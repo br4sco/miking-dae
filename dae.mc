@@ -112,10 +112,6 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold + MExprCSE
     let out = cse dae.out in
     { dae with bindings = bindings, eqns = eqns, out = out }
 
-  sem daeDestructiveCSE : TmDAERec -> TmDAERec
-  sem daeDestructiveCSE =| dae ->
-    _tmToTmDAERec (cseFunction false (_tmDAERecToTm dae))
-
   sem daeIndexReduce : [Int] -> TmDAERec -> TmDAERec
   sem daeIndexReduce ns =| dae ->
     let maxn = maxOrElse (lam. error "impossible") subi ns in

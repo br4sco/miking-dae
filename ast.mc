@@ -189,8 +189,22 @@ lang DAEAst = DAEParseAst + AstResult +
       else None ()
     else None ()
   | TmDAE r ->
+    let eqExprSeqH = lam env. lam free. lam ls. lam rs.
+      optionFoldlM (lam free. lam lr. eqExprH env free lr.0 lr.1) env (zip ls rs)
+    in
     match lhs with TmDAE l then
-      eqExprH env free (_tmDAERecToTm l) (_tmDAERecToTm r)
+      match eqExprH env free l.bindings r.bindings with Some free then
+        let varEnv =
+          foldl2 (lam env. lam l. lam r. biInsert (l.0, r.0) env)
+            env.varEnv l.vars r.vars
+        in
+        let env = { env with varEnv = varEnv } in
+        match eqExprSeqH env free l.ieqns r.ieqns with Some free then
+          match eqExprSeqH env free l.eqns r.eqns with Some free then
+            eqExprH env free l.out r.out
+          else None ()
+        else None ()
+      else None ()
     else None ()
 
   -- Cmp
@@ -201,7 +215,20 @@ lang DAEAst = DAEParseAst + AstResult +
     in
     if eqi lorder rorder then cmpExprH (TmVar l, TmVar r)
     else subi lorder rorder
-  | (TmDAE r, TmDAE l) -> cmpExprH (_tmDAERecToTm l, _tmDAERecToTm r)
+  | (TmDAE l, TmDAE r) ->
+    let bindingsDiff = cmpExpr l.bindings r.bindings in
+    if eqi bindingsDiff 0 then
+      let varsDiff = seqCmp (lam l. lam r. nameCmp l.0 r.0) l.vars r.vars in
+      if eqi varsDiff 0 then
+        let ieqnsDiff = seqCmp cmpExpr l.ieqns r.ieqns in
+        if eqi ieqnsDiff 0 then
+          let eqnsDiff = seqCmp cmpExpr l.eqns r.eqns in
+          if eqi eqnsDiff 0 then
+            cmpExpr l.out r.out
+          else eqnsDiff
+        else ieqnsDiff
+      else varsDiff
+    else bindingsDiff
 
   -- PrettyPrint
   sem isAtomic =
@@ -222,7 +249,29 @@ lang DAEAst = DAEParseAst + AstResult +
     match symbolizeExpr env (TmVar r) with TmVar r then
       TmDVar (tmDVarRecToTmVarRec order r)
     else error "Impossible"
-  | TmDAE r -> TmDAE (_tmToTmDAERec (symbolizeExpr env (_tmDAERecToTm r)))
+  | TmDAE r ->
+    let bindings = symbolizeExpr env r.bindings in
+    let env = addTopNames env bindings in
+    match
+      mapAccumL
+        (lam env. lam v.
+          match v with (id, ty) in
+          match symbolizeTyAnnot env ty with (tyVarEnv, ty) in
+          match setSymbol env.varEnv id with (varEnv, id) in
+          ({ env with varEnv = varEnv }, (id, ty)))
+        env r.vars
+      with (env, vars)
+    in
+    -- TODO(oerikss, 2023-09-05): Check that only dependent variables appear
+    -- differentiated w.r.t. the independent variable.
+    TmDAE {
+      r with
+      bindings = bindings,
+      vars = vars,
+      ieqns = map (symbolizeExpr env) r.ieqns,
+      eqns = map (symbolizeExpr env) r.eqns,
+      out = symbolizeExpr env r.out
+    }
 
   -- Type Check
   sem typeCheckExpr env =
@@ -231,7 +280,42 @@ lang DAEAst = DAEParseAst + AstResult +
     match typeCheckExpr env (TmVar varr) with TmVar varr then
       TmDVar (tmDVarRecToTmVarRec order varr)
     else error "impossible"
-  | TmDAE r -> TmDAE (_tmToTmDAERec (typeCheckExpr env (_tmDAERecToTm r)))
+  | TmDAE r ->
+    let bindings = typeCheckExpr env r.bindings in
+    let env = addTopTypes env bindings in
+    match
+      mapAccumL
+        (lam env. lam v.
+          match v with (id, ty) in
+          let ty = resolveType r.info env.tyConEnv ty in
+          (_insertVar id ty env, (id, ty)))
+        env
+        r.vars
+      with (env, vars)
+    in
+    -- TODO(oerikss, 2023-08-31): Make sure residuals are scalars
+    let ieqns = map (typeCheckExpr env) r.ieqns in
+    let eqns = map (typeCheckExpr env) r.eqns in
+    let out = typeCheckExpr env r.out in
+    TmDAE {
+      r with
+      bindings = bindings,
+      vars = vars,
+      ieqns = ieqns,
+      eqns = eqns,
+      out = out
+    }
+
+  sem addTopTypes : TCEnv -> Expr -> TCEnv
+  sem addTopTypes env =
+  | TmLet r -> addTopTypes (_insertVar r.ident r.tyBody env) r.inexpr
+  | TmRecLets r ->
+    let env =
+      foldl (lam env. lam b. (_insertVar b.ident b.tyBody env)) env r.bindings
+    in
+    addTopTypes env r.inexpr
+  | TmExt r -> addTopTypes (_insertVar r.ident r.tyIdent env) r.inexpr
+  | t -> env
 
   -- Parse
   sem parseDAEExprExn : String -> Expr
