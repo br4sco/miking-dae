@@ -141,7 +141,7 @@ lang DAEAst = DAEParseAst + AstResult +
        r with bindings = bindings, ieqns = ieqns, eqns = eqns, out = out
      })
 
-  -- Dependet variables
+  -- Dependent variables
   sem dvarsExpr : Set (Name, Int) -> Expr -> Set (Name, Int)
   sem dvarsExpr dvars =
   | TmDVar r -> setInsert (r.ident, r.order) dvars

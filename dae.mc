@@ -284,7 +284,7 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold + MExprCSE
           (mapEmpty subi)
           dae.ieqns
       in
-      -- If some state has been assigned the multiple value we take the mean of
+      -- If some state has been assigned multiple values we take the mean of
       -- these.
       -- TODO(oeriss, 2023-06-29): This should probably generate some warning.
       let mean = lam ts.
