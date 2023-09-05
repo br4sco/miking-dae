@@ -62,7 +62,8 @@ type Options = {
   outputOnlyLast : Bool,
   benchmarkResidual : Option Int,
   benchmarkJacobian : Option Int,
-  debug : Bool
+  debug : Bool,
+  seed : Int
 }
 
 let defaultOptions = {
@@ -71,7 +72,8 @@ let defaultOptions = {
   rtol = 1e-4,
   atol = 1e-6,
   outputOnlyLast = false,
-  debug = false
+  debug = false,
+  seed = 0
 }
 
 let argConfig = [
@@ -92,7 +94,10 @@ let argConfig = [
    lam p. { p.options with outputOnlyLast = true }),
   ([("--debug", "", "")],
    "Debug runtime. ",
-   lam p. { p.options with debug = true })
+   lam p. { p.options with debug = true }),
+  ([("--seed", " ", "<value>")],
+   "Random seed. ",
+   lam p. { p.options with seed = argToIntMin p 0 })
 ]
 
 let usage = lam prog. join [
@@ -113,7 +118,7 @@ let daeRuntimeBenchmarkRes : Int -> DAEResf -> ()
         let sum = ref 0. in
         let ws = wallTimeMs () in
         doLoop neval (lam.
-          let y = _randState n in
+          let y = _randState n in --
           modref sum (foldl addf (deref sum) (resf y y)));
         let wt = subf (wallTimeMs ()) ws in
         print (join [
@@ -179,6 +184,8 @@ let daeRuntimeRun
         modref _debug opt.debug;
         let resEvalCount = ref 0 in
         let jacEvalCount = ref 0 in
+        -- Set seed
+        randSetSeed opt.seed;
         -- Initialize
         match initVals with (y0, yp0) in
         let tol = idaSSTolerances opt.rtol opt.atol in
