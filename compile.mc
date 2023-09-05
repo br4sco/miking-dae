@@ -133,7 +133,7 @@ lang DAECompile =
         if options.numericJac then (ulam_ "" never_, ulam_ "" never_)
         else
           if options.disablePeval then
-            (daeGenADJacY daer, daeGenADJacYp daer)
+            (daeGenMixedJacY 0. daer, daeGenMixedJacYp 0. daer)
           else
             (daeGenMixedJacY jacSpecThreshold daer,
              daeGenMixedJacYp jacSpecThreshold daer)

@@ -509,17 +509,18 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold + MExprCSE
         let y = nameSetNewSym y in
         let yp = nameSetNewSym yp in
         let n = length dae.eqns in
-        let _jacc = nameSym "jacc" in
         let _idxs = nameSym "idxs" in
         let idxs =
           let s = daeJacStructure dae in
           let s = if jacY then s.0 else  s.1 in
           daeJacStructureToIdxSeq s
         in
-        let t = _daeGenJac jacY dae in
+        let jact = _daeGenJac jacY dae in
         let idxs_ = lam idxs.
           seq_ (map (lam jis. utuple_ [int_ jis.0, seq_ (map int_ jis.1)]) idxs)
         in
+        let yyp = (unzip dae.vars).0 in
+        let args = map nvar_ yyp in
         switch
           match
             partition
@@ -534,29 +535,25 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold + MExprCSE
               [int2string (length sIdxs), "specialized partial derivatives"]);
           (sIdxs, dIdxs)
         case (sIdxs, []) then
-          constantfoldLets
-            (peval
-               (let yyp = (unzip dae.vars).0 in
-                nulams_ yyp
-                  (bind_ (nulet_ _jacc t)
-                     (seq_
-                        (let args = map nvar_ yyp in [
-                          seq_ [],
-                          appSeq_ (nvar_ _jacc) (cons (idxs_ sIdxs) args)
-                        ])))))
+          nulams_ yyp
+            (seq_ [
+              seq_ [],
+              constantfoldLets
+                (peval (appSeq_ jact (cons (idxs_ sIdxs) args)))
+            ])
+        case ([], dIdxs) then
+          nulams_ yyp
+            (seq_ [
+              appSeq_ jact (cons (idxs_ dIdxs) args),
+              seq_ []
+            ])
         case (sIdxs, dIdxs) then
-          app_
-            (constantfoldLets
-               (peval
-                  (let yyp = (unzip dae.vars).0 in
-                   nulams_ (cons _idxs yyp)
-                     (bind_ (nulet_ _jacc t)
-                        (seq_
-                           (let args = map nvar_ yyp in [
-                             appSeq_ (nvar_ _jacc) (cons (nvar_ _idxs) args),
-                             appSeq_ (nvar_ _jacc) (cons (idxs_ sIdxs) args)
-                           ]))))))
-            (idxs_ dIdxs)
+          nulams_ yyp
+            (seq_ [
+              appSeq_ jact (cons (idxs_ dIdxs) args),
+              constantfoldLets
+                (peval (appSeq_ jact (cons (idxs_ sIdxs) args)))
+            ])
         end
       else
         error (errMsg "Not a first-order DAE" (TmDAE dae))
