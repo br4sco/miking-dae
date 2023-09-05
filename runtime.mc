@@ -63,6 +63,7 @@ type Options = {
   benchmarkResidual : Option Int,
   benchmarkJacobian : Option Int,
   debug : Bool,
+  printStats : Bool,
   seed : Int
 }
 
@@ -73,6 +74,7 @@ let defaultOptions = {
   atol = 1e-6,
   outputOnlyLast = false,
   debug = false,
+  dumpInfo = false,
   seed = 0
 }
 
@@ -95,6 +97,9 @@ let argConfig = [
   ([("--debug", "", "")],
    "Debug runtime. ",
    lam p. { p.options with debug = true }),
+  ([("--dump-info", "", "")],
+   "Dump solver info to stderr. ",
+   lam p. { p.options with dumpInfo = true }),
   ([("--seed", " ", "<value>")],
    "Random seed. ",
    lam p. { p.options with seed = argToIntMin p 0 })
@@ -110,8 +115,24 @@ let usage = lam prog. join [
 let _randState = lam n. create n (lam. int2float (randIntU 0 10))
 let _benchUsage = lam prog. join [prog, " INTEGER\n"]
 
+let parseArgs = lam.
+  switch argParse defaultOptions argConfig
+  case ParseOK r then
+    -- Print menu if not exactly zero file argument
+    if neqi (length r.strings) 0 then
+      print (usage (get argv 0));
+      exit 1
+    else r.options
+  case result then
+    argPrintError result;
+    exit 1
+  end
+
 let daeRuntimeBenchmarkRes : Int -> DAEResf -> ()
   = lam n. lam resf.
+    let opt = parseArgs () in
+    -- Set seed
+    randSetSeed opt.seed;
     if eqi (length argv) 2 then
       if stringIsInt (get argv 1) then
         let neval = string2int (get argv 1) in
@@ -136,6 +157,9 @@ let daeRuntimeBenchmarkRes : Int -> DAEResf -> ()
 
 let daeRuntimeBenchmarkJac : Int -> DAEJacf -> DAEJacf -> ()
   = lam n. lam jacYf. lam jacYpf.
+    let opt = parseArgs () in
+    -- Set seed
+    randSetSeed opt.seed;
     if eqi (length argv) 2 then
       if stringIsInt (get argv 1) then
         let neval = string2int (get argv 1) in
@@ -171,126 +195,124 @@ let daeRuntimeBenchmarkJac : Int -> DAEJacf -> DAEJacf -> ()
 let daeRuntimeRun
   : Bool -> [Bool] -> DAEInit -> DAEResf -> DAEJacf -> DAEJacf -> DAEOutf -> ()
   = lam numjac. lam varids. lam initVals. lam resf. lam jacYf. lam jacYpf. lam outf.
-    -- Parse arguments
-    switch argParse defaultOptions argConfig
-    case ParseOK r then
-      -- Print menu if not exactly zero file argument
-      if neqi (length r.strings) 0 then
-        print (usage (get argv 0));
-        exit 1
+    let opt = parseArgs () in
+    let n = length varids in
+    modref _debug opt.debug;
+    let resEvalCount = ref 0 in
+    let jacEvalCount = ref 0 in
+    let resTimeCount = ref 0. in
+    let jacTimeCount = ref 0. in
+    -- Set seed
+    randSetSeed opt.seed;
+    -- Initialize
+    match initVals with (y0, yp0) in
+    let tol = idaSSTolerances opt.rtol opt.atol in
+    let y = vcreate n (get y0) in
+    let yp = vcreate n (get yp0) in
+    let resf = lam t. lam y. lam yp. lam r.
+      -- gather statistics
+      modref resEvalCount (succ (deref resEvalCount));
+      -- compute residual
+      let y = create n (vget y) in
+      let yp = create n (vget yp) in
+      let ws = wallTimeMs () in
+      let t = resf y yp in
+      let we = wallTimeMs () in
+      iteri (vset r) t;
+      modref resTimeCount (addf (deref resTimeCount) (subf we ws));
+      ()
+    in
+    let r = vcreate n (lam. 0.) in
+    resf y yp r;
+    debugPrint
+      (lam. strJoin "\n"
+            ["Initial residual:", stateToString y yp, vecToString "r" r]);
+    let v = nvectorSerialWrap y in
+    let vp = nvectorSerialWrap yp in
+    let m = sundialsMatrixDense n in
+    let nlsolver = sundialsNonlinearSolverNewtonMake v in
+    let lsolver =
+      if numjac then idaDlsSolver (idaDlsDense v m)
       else
-        let opt = r.options in
-        let n = length varids in
-        modref _debug opt.debug;
-        let resEvalCount = ref 0 in
-        let jacEvalCount = ref 0 in
-        -- Set seed
-        randSetSeed opt.seed;
-        -- Initialize
-        match initVals with (y0, yp0) in
-        let tol = idaSSTolerances opt.rtol opt.atol in
-        let y = vcreate n (get y0) in
-        let yp = vcreate n (get yp0) in
-        let resf = lam t. lam y. lam yp. lam r.
-          (if opt.debug then
-            modref resEvalCount (succ (deref resEvalCount))
-           else ());
-          let y = create n (vget y) in
-          let yp = create n (vget yp) in
-          let t = resf y yp in
-          iteri (vset r) t;
+        let jacf = lam jacargs : IdaJacArgs. lam m : SundialsMatrixDense.
+          -- gather statistics
+          modref jacEvalCount (succ (deref jacEvalCount));
+          -- compute Jacobian
+          let y = create n (vget jacargs.y) in
+          let yp = create n (vget jacargs.yp) in
+          let m = sundialsMatrixDenseUnwrap m in
+          let ws = wallTimeMs () in
+          iter
+            (iter
+               (lam ijf.
+                 match ijf with ((i, j), f) in
+                 -- m is in column-major format
+                 mset m j i (f ())))
+            (jacYf y yp);
+          iter
+            (iter
+               (lam ijf.
+                 match ijf with ((i, j), f) in
+                 -- m is in column-major format
+                 mset m j i (addf (mget m j i) (mulf jacargs.c (f ())))))
+            (jacYpf y yp);
+          let we = wallTimeMs () in
+          modref jacTimeCount (addf (deref jacTimeCount) (subf we ws));
           ()
         in
-        let r = vcreate n (lam. 0.) in
-        resf y yp r;
-        debugPrint
-          (lam. strJoin "\n"
-                ["Initial residual:", stateToString y yp, vecToString "r" r]);
-        let v = nvectorSerialWrap y in
-        let vp = nvectorSerialWrap yp in
-        let m = sundialsMatrixDense n in
-        let nlsolver = sundialsNonlinearSolverNewtonMake v in
-        let lsolver =
-          if numjac then idaDlsSolver (idaDlsDense v m)
-          else
-            let jacf = lam jacargs : IdaJacArgs. lam m : SundialsMatrixDense.
-              (if opt.debug then
-                modref jacEvalCount (succ (deref jacEvalCount))
-               else ());
-              let y = create n (vget jacargs.y) in
-              let yp = create n (vget jacargs.yp) in
-              let m = sundialsMatrixDenseUnwrap m in
-              iter
-                (iter
-                   (lam ijf.
-                     match ijf with ((i, j), f) in
-                     -- m is in column-major format
-                     mset m j i (f ())))
-                (jacYf y yp);
-              iter
-                (iter
-                   (lam ijf.
-                     match ijf with ((i, j), f) in
-                     -- m is in column-major format
-                     mset m j i (addf (mget m j i) (mulf jacargs.c (f ())))))
-                (jacYpf y yp);
-              ()
-            in
-            idaDlsSolverJacf jacf (idaDlsDense v m)
-        in
-        let varid =
-          nvectorSerialWrap
-            (vcreate n
-               (lam i. if get varids i then idaVarIdDifferential
-                     else idaVarIdAlgebraic))
-        in
-        let t0 = negf 1.e-4 in
-        let s = idaInit {
-          tol      = tol,
-          nlsolver = nlsolver,
-          lsolver  = lsolver,
-          resf     = resf,
-          varid    = varid,
-          roots    = idaNoRoots,
-          t        = t0,
-          y        = v,
-          yp       = vp
-        } in
-        idaCalcICYaYd s { tend = 0., y = v, yp = vp };
-        resf y yp r;
-        debugPrint
-          (lam. strJoin "\n"
-                ["After idaCalcICYaYd:", stateToString y yp, vecToString "r" r]);
-        idaSetStopTime s opt.interval;
-        -- Solve
-        recursive let recur = lam t.
-          let y = create n (vget y) in
-          let yp = create n (vget yp) in
-          (if opt.outputOnlyLast then () else outf y yp);
-          if gtf t opt.interval then ()
-          else
-            switch idaSolveNormal s { tend = addf t opt.stepSize, y = v, yp = vp }
-            case (tend, IdaSuccess _) then recur tend
-            case (_, IdaStopTimeReached _) then
-              (if opt.outputOnlyLast then outf y yp else ())
-                   case (tend, IdaRootsFound _) then
-                   printError (join ["Roots found at t = ", float2string tend]);
-                   flushStderr ()
-                   case (tend, IdaSolveError _) then
-                   printError (join ["Solver error at t = ", float2string tend]);
-                   flushStderr ()
-                   end
-        in
-        recur 0.;
-        debugPrint
-          (lam. join ["residual evaluations: ", int2string (deref resEvalCount)]);
-        debugPrint
-          (lam. join ["jacobian evaluations: ", int2string (deref jacEvalCount)]);
-        ()
-    case result then
-      argPrintError result;
-      exit 1
-    end
+        idaDlsSolverJacf jacf (idaDlsDense v m)
+    in
+    let varid =
+      nvectorSerialWrap
+        (vcreate n
+           (lam i. if get varids i then idaVarIdDifferential
+                 else idaVarIdAlgebraic))
+    in
+    let t0 = negf 1.e-4 in
+    let s = idaInit {
+      tol      = tol,
+      nlsolver = nlsolver,
+      lsolver  = lsolver,
+      resf     = resf,
+      varid    = varid,
+      roots    = idaNoRoots,
+      t        = t0,
+      y        = v,
+      yp       = vp
+    } in
+    idaCalcICYaYd s { tend = 0., y = v, yp = vp };
+    resf y yp r;
+    debugPrint
+      (lam. strJoin "\n"
+            ["After idaCalcICYaYd:", stateToString y yp, vecToString "r" r]);
+    idaSetStopTime s opt.interval;
+    -- Solve
+    recursive let recur = lam t.
+      let y = create n (vget y) in
+      let yp = create n (vget yp) in
+      (if opt.outputOnlyLast then () else outf y yp);
+      if gtf t opt.interval then ()
+      else
+        switch idaSolveNormal s { tend = addf t opt.stepSize, y = v, yp = vp }
+        case (tend, IdaSuccess _) then recur tend
+        case (_, IdaStopTimeReached _) then
+          (if opt.outputOnlyLast then outf y yp else ())
+               case (tend, IdaRootsFound _) then
+               printError (join ["Roots found at t = ", float2string tend]);
+               flushStderr ()
+               case (tend, IdaSolveError _) then
+               printError (join ["Solver error at t = ", float2string tend]);
+               flushStderr ()
+               end
+    in
+    recur 0.;
+    (if opt.dumpInfo then
+      print (join ["resvals: ", int2string (deref resEvalCount), "\n"]);
+      print (join ["jacevals: ", int2string (deref jacEvalCount), "\n"]);
+      print (join ["restime: ", float2string (deref resTimeCount), "\n"]);
+      print (join ["jactime: ", float2string (deref jacTimeCount), "\n"])
+     else ());
+    ()
 
 mexpr
 
