@@ -12,8 +12,9 @@ include "result.mc"
 include "error.mc"
 include "tuple.mc"
 
+include "pead::ad.mc"
+
 include "./ast_gen.mc"
-include "../miking-pead/ad.mc"
 
 type Res a = Result ErrorSection ErrorSection a
 
