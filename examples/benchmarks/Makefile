@@ -19,19 +19,22 @@ FURUTA_MC := $(FURUTA_EXE:.exe=.mc)
 
 SIM_ARGS := --output-only-last --step-size 1 --rtol 1.e-5 --atol 1.e-7
 
-LABEL := A
-RUNS := 10
+LABEL := B
+RUNS := 25
 WARMUP := 5
 SLEEP := 5
 
 # 1: experiment name
 # 2: simulation interval
 # 3: configurations
+# 4: name
 define runhyperfine
-	hyperfine 'taskset -c 0 ./$(1)-{n}.exe ${SIM_ARGS} --interval $(2) && sleep ${SLEEP}' --parameter-list n $(3) --warmup ${WARMUP} --runs ${RUNS} --export-json results-$(1)-${LABEL}.json
+	hyperfine 'if taskset -c 0 ./$(1)-{n}.exe ${SIM_ARGS} --interval $(2); then sleep ${SLEEP};  else exit 1; fi' --parameter-list n $(3) --warmup ${WARMUP} --runs ${RUNS} --export-json ${LABEL}-results-$(4).json
 endef
 
-.PHONY: clean cauer-10 cauer_100 pendulum furuta bench
+.PHONY: clean cauer-10 cauer_100 pendulum furuta bench all
+
+all: cauer-10 cauer-100 pendulum furuta
 
 cauer-10: $(CAUER_10_EXE) $(CAUER_10_MC)
 
@@ -43,20 +46,25 @@ furuta: $(FURUTA_EXE) $(FURUTA_MC)
 
 bench: bench-cauer-10 bench-cauer-100 bench-pendulum bench-cauer-100 bench-furuta
 
-cauer_arg := ad,0,1,2
+test_cauer_arg := 2,2,2,2
+test-bench-cauer-10: cauer_10-2.exe
+	$(call runhyperfine,cauer_10,10000,$(test_cauer_arg),cauer_10_test)
+
+# cauer_arg := ad,0,1,2
+cauer_arg := 2,1,0,ad
 bench-cauer-10: $(CAUER_10_EXE)
-	$(call runhyperfine,cauer_10,10000,$(cauer_arg))
+	$(call runhyperfine,cauer_10,10000,$(cauer_arg),cauer_10)
 
 bench-cauer-100: $(CAUER_100_EXE)
-	$(call runhyperfine,cauer_100,1000,$(cauer_arg))
+	$(call runhyperfine,cauer_100,1000,$(cauer_arg),cauer_100)
 
 pendulum_arg := ad,0,1,2,3
 bench-pendulum: $(PENDULUM_EXE)
-	$(call runhyperfine,pendulum,10000,$(pendulum_arg))
+	$(call runhyperfine,pendulum,10000,$(pendulum_arg),pendulum)
 
 furuta_arg := ad,0,1,2,3,4,5,6,7,8,9,10
 bench-furuta: $(FURUTA_EXE)
-	$(call runhyperfine,furuta,1000,$(furuta_arg))
+	$(call runhyperfine,furuta,1000,$(furuta_arg),furuta)
 
 %.exe: %.mc
 	mi compile --output $@ $<
