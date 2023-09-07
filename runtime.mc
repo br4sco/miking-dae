@@ -115,14 +115,14 @@ let usage = lam prog. join [
 let _randState = lam n. create n (lam. int2float (randIntU 0 10))
 let _benchUsage = lam prog. join [prog, " INTEGER\n"]
 
-let parseArgs = lam.
+let parseArgs = lam n.
   switch argParse defaultOptions argConfig
   case ParseOK r then
-    -- Print menu if not exactly zero file argument
-    if neqi (length r.strings) 0 then
+    -- Print menu if not exactly n arguments
+    if neqi (length r.strings) n then
       print (usage (get argv 0));
       exit 1
-    else r.options
+    else (r.options, r.strings)
   case result then
     argPrintError result;
     exit 1
@@ -130,12 +130,11 @@ let parseArgs = lam.
 
 let daeRuntimeBenchmarkRes : Int -> DAEResf -> ()
   = lam n. lam resf.
-    let opt = parseArgs () in
-    -- Set seed
-    randSetSeed opt.seed;
-    if eqi (length argv) 2 then
-      if stringIsInt (get argv 1) then
-        let neval = string2int (get argv 1) in
+    match parseArgs 1 with (opt, [neval]) then
+      -- Set seed
+      randSetSeed opt.seed;
+      if stringIsInt neval then
+        let neval = string2int neval in
         let sum = ref 0. in
         let ws = wallTimeMs () in
         doLoop neval (lam.
@@ -148,7 +147,8 @@ let daeRuntimeBenchmarkRes : Int -> DAEResf -> ()
           " times in ",
           float2string wt,
           " ms, accumulating the residual value ",
-          float2string (deref sum)
+          float2string (deref sum),
+          "\n"
         ])
       else
         print (_benchUsage (get argv 0)); exit 1
@@ -157,11 +157,10 @@ let daeRuntimeBenchmarkRes : Int -> DAEResf -> ()
 
 let daeRuntimeBenchmarkJac : Int -> DAEJacf -> DAEJacf -> ()
   = lam n. lam jacYf. lam jacYpf.
-    let opt = parseArgs () in
-    -- Set seed
-    randSetSeed opt.seed;
-    if eqi (length argv) 2 then
-      if stringIsInt (get argv 1) then
+    match parseArgs 1 with (opt, [neval]) then
+      -- Set seed
+      randSetSeed opt.seed;
+      if stringIsInt neval then
         let neval = string2int (get argv 1) in
         let sum = ref 0. in
         let ws = wallTimeMs () in
@@ -184,8 +183,9 @@ let daeRuntimeBenchmarkJac : Int -> DAEJacf -> DAEJacf -> ()
           int2string neval,
           " times in ",
           float2string wt,
-          " ms, accumulating the residual value ",
-          float2string (deref sum)
+          " ms, accumulating the value ",
+          float2string (deref sum),
+          "\n"
         ])
       else
         print (_benchUsage (get argv 0)); exit 1
@@ -195,7 +195,7 @@ let daeRuntimeBenchmarkJac : Int -> DAEJacf -> DAEJacf -> ()
 let daeRuntimeRun
   : Bool -> [Bool] -> DAEInit -> DAEResf -> DAEJacf -> DAEJacf -> DAEOutf -> ()
   = lam numjac. lam varids. lam initVals. lam resf. lam jacYf. lam jacYpf. lam outf.
-    let opt = parseArgs () in
+    match parseArgs 0 with (opt, _) in
     let n = length varids in
     modref _debug opt.debug;
     let resEvalCount = ref 0 in

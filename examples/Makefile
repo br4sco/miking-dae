@@ -37,6 +37,78 @@ expected: $(MODELS_NUMERIC_JAC:.dae=.out.expected)
 clean:
 	rm -rf *.exe *.out *.mc *.OK
 
+%-0-res.mc: %.dae
+	@$(PEADAE_SPEC) 0 --benchmark-res $< > $@
+
+%-1-res.mc: %.dae
+	@$(PEADAE_SPEC) 1 --benchmark-res $< > $@
+
+%-2-res.mc: %.dae
+	@$(PEADAE_SPEC) 2 --benchmark-res $< > $@
+
+%-3-res.mc: %.dae
+	@$(PEADAE_SPEC) 3 --benchmark-res $< > $@
+
+%-4-res.mc: %.dae
+	@$(PEADAE_SPEC) 4 --benchmark-res $< > $@
+
+%-5-res.mc: %.dae
+	@$(PEADAE_SPEC) 5 --benchmark-res $< > $@
+
+%-6-res.mc: %.dae
+	@$(PEADAE_SPEC) 6 --benchmark-res $< > $@
+
+%-7-res.mc: %.dae
+	@$(PEADAE_SPEC) 7 --benchmark-res $< > $@
+
+%-8-res.mc: %.dae
+	@$(PEADAE_SPEC) 8 --benchmark-res $< > $@
+
+%-9-res.mc: %.dae
+	@$(PEADAE_SPEC) 9 --benchmark-res $< > $@
+
+%-10-res.mc: %.dae
+	@$(PEADAE_SPEC) 10 --benchmark-res $< > $@
+
+%-ad-res.mc: %.dae
+	@../build/${TOOL_NAME} --debug --cse --disable-peval --benchmark-res $< > $@
+
+%-0-jac.mc: %.dae
+	@$(PEADAE_SPEC) 0 --benchmark-jac $< > $@
+
+%-1-jac.mc: %.dae
+	@$(PEADAE_SPEC) 1 --benchmark-jac $< > $@
+
+%-2-jac.mc: %.dae
+	@$(PEADAE_SPEC) 2 --benchmark-jac $< > $@
+
+%-3-jac.mc: %.dae
+	@$(PEADAE_SPEC) 3 --benchmark-jac $< > $@
+
+%-4-jac.mc: %.dae
+	@$(PEADAE_SPEC) 4 --benchmark-jac $< > $@
+
+%-5-jac.mc: %.dae
+	@$(PEADAE_SPEC) 5 --benchmark-jac $< > $@
+
+%-6-jac.mc: %.dae
+	@$(PEADAE_SPEC) 6 --benchmark-jac $< > $@
+
+%-7-jac.mc: %.dae
+	@$(PEADAE_SPEC) 7 --benchmark-jac $< > $@
+
+%-8-jac.mc: %.dae
+	@$(PEADAE_SPEC) 8 --benchmark-jac $< > $@
+
+%-9-jac.mc: %.dae
+	@$(PEADAE_SPEC) 9 --benchmark-jac $< > $@
+
+%-10-jac.mc: %.dae
+	@$(PEADAE_SPEC) 10 --benchmark-jac $< > $@
+
+%-ad-jac.mc: %.dae
+	@../build/${TOOL_NAME} --debug --cse --disable-peval --benchmark-jac $< > $@
+
 %-0.mc: %.dae
 	@$(PEADAE_SPEC) 0 $< > $@
 
