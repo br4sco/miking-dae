@@ -1,8 +1,9 @@
 import sys
 import json
 import pandas as pd
+import re
 
-label = "E"
+label = "F"
 
 names = ["cauer_10", "cauer_100", "pendulum", "furuta"]
 
@@ -24,8 +25,8 @@ def load_times(suffix):
 
 
 data = {
-    "sim": load_times(""),
-    "res": load_times("-res"),
+    # "sim": load_times(""),
+    # "res": load_times("-res"),
     "jac": load_times("-jac"),
 }
 
@@ -48,3 +49,6 @@ for mode, v in data.items():
         df["y-max"] = df["y-max"] - df["y"]
         df = df[["y", "y-min", "y-max"]]
         df.to_csv(f"csv/{name}-{mode}.csv", index_label="x")
+
+sizes = pd.read_csv("sizes.csv", header=None)
+sizes[1] = sizes[1] / 1000000

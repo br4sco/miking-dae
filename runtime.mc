@@ -168,16 +168,12 @@ let daeRuntimeBenchmarkJac : Int -> DAEJacf -> DAEJacf -> ()
           (lam.
             let y = _randState n in
             let yp = _randState n in
-            modref sum
-              (foldl
-                 (foldl (lam sum. lam f. addf sum (f.1 ())))
-                 (deref sum)
-                 (jacYf y yp));
-            modref sum
-              (foldl
-                 (foldl (lam sum. lam f. addf sum (f.1 ())))
-                 (deref sum)
-                 (jacYpf y yp)));
+            iter
+              (iter (lam f. modref sum (addf (deref sum) (f.1 ()))))
+              (jacYf y yp);
+            iter
+              (iter (lam f. modref sum (addf (deref sum) (f.1 ()))))
+              (jacYpf y yp));
         let wt = subf (wallTimeMs ()) ws in
         print (join [
           "Executed the Jacobian ",

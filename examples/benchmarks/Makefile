@@ -40,7 +40,7 @@ FURUTA_JAC_MC := $(FURUTA_JAC_EXE:.exe=.jac.mc)
 SIM_ARGS := --output-only-last --step-size 1 --rtol 1.e-5 --atol 1.e-7
 
 SEED := 0
-LABEL := E
+LABEL := F
 RUNS := 25
 WARMUP := 5
 SLEEP := 5
@@ -312,6 +312,15 @@ cauer-100-0-jac-cache-stats: cauer_100-0.jac.exe
 
 cauer-100-1-jac-cache-stats: cauer_100-1.jac.exe
 	$(call cachestatsresjac,$<,2900)
+
+cauer-100-2-jac-cache-stats: cauer_100-2.jac.exe
+	$(call cachestatsresjac,$<,2900)
+
+furuta-0-jac-cache-stats: furuta-0.jac.exe
+	$(call cachestatsresjac,$<,1000)
+
+furuta-1-jac-cache-stats: furuta-1.jac.exe
+	$(call cachestatsresjac,$<,1000)
 
 clean:
 	rm -rf *.exe *.mc
