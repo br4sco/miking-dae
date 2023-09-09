@@ -161,22 +161,23 @@ let daeRuntimeBenchmarkJac : Int -> DAEJacf -> DAEJacf -> ()
       -- Set seed
       randSetSeed opt.seed;
       if stringIsInt neval then
-        let neval = string2int (get argv 1) in
+        let neval = string2int neval in
         let sum = ref 0. in
         let ws = wallTimeMs () in
         doLoop neval
           (lam.
             let y = _randState n in
+            let yp = _randState n in
             modref sum
               (foldl
                  (foldl (lam sum. lam f. addf sum (f.1 ())))
                  (deref sum)
-                 (jacYf y y));
+                 (jacYf y yp));
             modref sum
               (foldl
                  (foldl (lam sum. lam f. addf sum (f.1 ())))
                  (deref sum)
-                 (jacYpf y y)));
+                 (jacYpf y yp)));
         let wt = subf (wallTimeMs ()) ws in
         print (join [
           "Executed the Jacobian ",
