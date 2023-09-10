@@ -536,20 +536,20 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold + MExprCSE
           (sIdxs, dIdxs)
         case (sIdxs, []) then
           nulams_ yyp
-            (seq_ [
+            (utuple_ [
               seq_ [],
               constantfoldLets
                 (peval (appSeq_ jact (cons (idxs_ sIdxs) args)))
             ])
         case ([], dIdxs) then
           nulams_ yyp
-            (seq_ [
+            (utuple_ [
               appSeq_ jact (cons (idxs_ dIdxs) args),
               seq_ []
             ])
         case (sIdxs, dIdxs) then
           nulams_ yyp
-            (seq_ [
+            (utuple_ [
               appSeq_ jact (cons (idxs_ dIdxs) args),
               constantfoldLets
                 (peval (appSeq_ jact (cons (idxs_ sIdxs) args)))

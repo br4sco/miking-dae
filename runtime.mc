@@ -51,7 +51,7 @@ let errorExit = lam. print (usage ()); print "\n"; exit 1
 type DAEInit = ([Float], [Float])
 type DAEResf = [Float] -> [Float] -> [Float]
 type DAEJacVals = [((Int, Int), () -> Float)]
-type DAEJacf = [Float] -> [Float] -> [DAEJacVals]
+type DAEJacf = [Float] -> [Float] -> (DAEJacVals, DAEJacVals)
 type DAEOutf = [Float] -> [Float] -> ()
 
 type Options = {
@@ -168,12 +168,15 @@ let daeRuntimeBenchmarkJac : Int -> DAEJacf -> DAEJacf -> ()
           (lam.
             let y = _randState n in
             let yp = _randState n in
-            iter
-              (iter (lam f. modref sum (addf (deref sum) (f.1 ()))))
-              (jacYf y yp);
-            iter
-              (iter (lam f. modref sum (addf (deref sum) (f.1 ()))))
-              (jacYpf y yp));
+            let jy = iter (lam f. modref sum (addf (deref sum) (f.1 ()))) in
+            let fs = jacYf y yp in
+            jy fs.0;
+            jy fs.1;
+            let jyp = iter (lam f. modref sum (addf (deref sum) (f.1 ()))) in
+            let fs = jacYpf y yp in
+            jyp fs.0;
+            jyp fs.1;
+            ());
         let wt = subf (wallTimeMs ()) ws in
         print (join [
           "Executed the Jacobian ",
@@ -239,20 +242,26 @@ let daeRuntimeRun
           let yp = create n (vget jacargs.yp) in
           let m = sundialsMatrixDenseUnwrap m in
           let ws = wallTimeMs () in
-          iter
-            (iter
-               (lam ijf.
-                 match ijf with ((i, j), f) in
-                 -- m is in column-major format
-                 mset m j i (f ())))
-            (jacYf y yp);
-          iter
-            (iter
-               (lam ijf.
-                 match ijf with ((i, j), f) in
-                 -- m is in column-major format
-                 mset m j i (addf (mget m j i) (mulf jacargs.c (f ())))))
-            (jacYpf y yp);
+          let jy =
+            iter
+              (lam ijf.
+                match ijf with ((i, j), f) in
+                -- m is in column-major format
+                mset m j i (f ()))
+          in
+          let fs = jacYf y yp in
+          jy fs.0;
+          jy fs.1;
+          let jyp =
+            iter
+              (lam ijf.
+                match ijf with ((i, j), f) in
+                -- m is in column-major format
+                mset m j i (addf (mget m j i) (mulf jacargs.c (f ()))))
+          in
+          let fs = jacYpf y yp in
+          jyp fs.0;
+          jyp fs.1;
           let we = wallTimeMs () in
           modref jacTimeCount (addf (deref jacTimeCount) (subf we ws));
           ()
