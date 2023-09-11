@@ -40,9 +40,9 @@ FURUTA_JAC_MC := $(FURUTA_JAC_EXE:.exe=.jac.mc)
 SIM_ARGS := --output-only-last --step-size 1 --rtol 1.e-5 --atol 1.e-7
 
 SEED := 0
-LABEL := F
-RUNS := 25
-WARMUP := 5
+LABEL := G
+RUNS := 100
+WARMUP := 3
 SLEEP := 5
 SEED := 0
 

@@ -3,7 +3,7 @@ import json
 import pandas as pd
 import re
 
-label = "F"
+label = "G"
 
 names = ["cauer_10", "cauer_100", "pendulum", "furuta"]
 
@@ -25,8 +25,8 @@ def load_times(suffix):
 
 
 data = {
-    # "sim": load_times(""),
-    # "res": load_times("-res"),
+    "sim": load_times(""),
+    "res": load_times("-res"),
     "jac": load_times("-jac"),
 }
 
