@@ -1,9 +1,0 @@
-variables
-x, vx : Float
-init
-x = 1.
-equations
-x' = vx;
-vx' + vx + x = 0.
-output
-{x, vx, vx'}
