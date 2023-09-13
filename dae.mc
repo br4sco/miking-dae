@@ -140,10 +140,7 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold + MExprCSE
         let b = peadAstBuilder info in
         if or (nameEq r.ident y) (nameEq r.ident yp) then
           let ident = daeID (if nameEq r.ident y then y else yp, 1) in
-          let tp = TmApp {
-            appr1 with
-            lhs = TmApp { appr2 with rhs = TmVar { r with ident = ident }}}
-          in
+          let tp = if_ (eqi_ (nvar_ ident) (int_ i)) (float_ 1.) (float_ 0.) in
           b.dualnum t tp
         else t
       else smap_Expr_Expr inner t
@@ -448,7 +445,7 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold + MExprCSE
         let _acc2 = nameSym "acc" in
         let daeJacADExpr = daeJacADExpr y yp in
         let t = bindall_ [
-          nulet_ (daeID (yp, 1)) (seq_ (create n (lam. float_ 0.))),
+          nulet_ (daeID (yp, 1)) (int_ (negi 1)),
           nulams_ (cons _idxs (unzip dae.vars).0)
             (bind_
                (nulet_ _r
@@ -467,8 +464,7 @@ lang DAE = DAEAst + MExprFreeVars + MExprConstantFold + MExprCSE
                (foldl_
                   (nulams_ [_acc1, _jis]
                      (bind_
-                        (nulet_ (daeID (y, 1))
-                           (appf2_ (uconst_ (COnehot ())) (int_ n) _j))
+                        (nulet_ (daeID (y, 1)) _j)
                         (foldl_
                            (nulams_ [_acc2, _i]
                               (cons_
