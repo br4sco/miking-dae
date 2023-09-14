@@ -1268,36 +1268,40 @@ lam idxs. lam y. lam yp.
                lam dy. lam.
                  negf
                    (addf
-                      (mulf (get y 0) (get dy 4))
-                      (mulf (get dy 0) (get y 4))),
-               lam dy. lam .
+                      (mulf (get y 0) (if eqi dy 4 then 1. else 0.))
+                      (mulf (if eqi dy 0 then 1. else 0.) (get y 4))),
+               lam dy. lam.
                  negf
                    (addf
-                      (mulf (get y 2) (get dy 4))
-                      (mulf (get dy 2) (get y 4))),
+                      (mulf (get y 2) (if eqi dy 4 then 1. else 0.))
+                      (mulf (if eqi dy 2 then 1. else 0.) (get y 4))),
                lam dy. lam.
+                 let t1 = if eqi dy 1 then 1. else 0. in
+                 let t0 = if eqi dy 0 then 1. else 0. in
+                 let t3 = if eqi dy 3 then 1. else 0. in
+                 let t2 = if eqi dy 2 then 1. else 0. in
                  addf
                    (addf
                       (addf
-                         (mulf (get dy 0) (get yp 1))
+                         (mulf t0 (get yp 1))
                          (mulf 2.
                             (addf
-                               (mulf (get y 1) (get dy 1))
-                               (mulf (get dy 1) (get y 1)))))
-                      (mulf (get yp 1) (get dy 0)))
+                               (mulf (get y 1) t1)
+                               (mulf t1 (get y 1)))))
+                      (mulf (get yp 1) t0))
                    (addf
                       (addf
-                         (mulf (get dy 2) (get yp 3))
+                         (mulf t2 (get yp 3))
                          (mulf 2.
                             (addf
-                               (mulf (get y 3) (get dy 3))
-                               (mulf (get dy 3) (get y 3)))))
-                      (mulf (get yp 3) (get dy 2))),
-               lam dy. lam. get dy 1,
-               lam dy. lam. get dy 3
+                               (mulf (get y 3) t3)
+                               (mulf t3 (get y 3)))))
+                      (mulf (get yp 3) t2)),
+               lam dy. lam. if eqi dy 1 then 1. else 0.,
+               lam dy. lam. if eqi dy 3 then 1. else 0.
              ]
                i
-               (onehot 5 jis.0))
+               (jis.0))
             acc)
         acc
         jis.1)
@@ -1424,6 +1428,9 @@ logSetLogLevel logLevel.error;
 -- Test: daeGenMixedJacY --
 ---------------------------
 
+-- This is no longer passing beacuse we do not currently partially evaluate the
+-- non-specialized partial derivatives and that part look horrendeous.
+
 let expected = _parseExpr "
 lam y. lam yp. [
   foldl
@@ -1433,20 +1440,23 @@ lam y. lam yp. [
           cons
             ((i, jis.0)
             ,get [
-              lam dyp. lam. get dyp 1,
-              lam dyp. lam. get dyp 3,
-              lam dyp. lam. addf
+              lam dyp. lam. if eqi dyp 1 then 1. else 0.,
+              lam dyp. lam. if eqi dyp 3 then 1. else 0.,
+              lam dyp. lam.
+                   let t1 = if eqi dyp 1 then 1. else 0. in
+                   let t2 = if eqi dyp 2 then 1. else 0. in
+                   addf
                        (addf
-                          (mulf (get y 0) (get dyp 1))
-                          (mulf (get dyp 1) (get y 0)))
+                          (mulf (get y 0) t1)
+                          (mulf t1 (get y 0)))
                        (addf
-                          (mulf (get y 2) (get dyp 3))
-                          (mulf (get dyp 3) (get y 2))),
-              lam dyp. lam. negf (get dyp 0),
-              lam dyp. lam. negf (get dyp 2)
+                          (mulf (get y 2) t2)
+                          (mulf t2 (get y 2))),
+              lam dyp. lam. negf (if eqi dyp 0 then 1. else 0.),
+              lam dyp. lam. negf (if eqi dyp 2 then 1. else 0.)
             ]
                i
-               (onehot 5 jis.0))
+               (jis.0))
             acc1)
         acc
         jis.1)
