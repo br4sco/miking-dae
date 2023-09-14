@@ -44,6 +44,7 @@ infix left Sub: DAEExpr = "-"
 infix left Mul: DAEExpr = "*"
 infix left Div: DAEExpr = "/"
 infix left Lt: DAEExpr = "<"
+infix left Ltf: DAEExpr = "<."
 infix left Eq: DAEExpr = "=="
 prefix Neg: DAEExpr = "-."
 prod MatchIn: DAEExpr =

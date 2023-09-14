@@ -202,6 +202,7 @@ lang DAEExprPrettyPrint = DAEParsePrettyPrintBase +
   MulDAEExprAst +
   DivDAEExprAst +
   LtDAEExprAst +
+  LtfDAEExprAst +
   EqDAEExprAst +
   NegDAEExprAst +
   MatchInDAEExprAst +
@@ -216,7 +217,7 @@ lang DAEExprPrettyPrint = DAEParsePrettyPrintBase +
   | AppDAEExpr _ -> 5
   | MulDAEExpr _ | DivDAEExpr _ -> 4
   | AddDAEExpr _ | SubDAEExpr _ -> 3
-  | LtDAEExpr _ | EqDAEExpr _ -> 2
+  | LtDAEExpr _ | LtfDAEExpr _ | EqDAEExpr _ -> 2
   | AbsDAEExpr _ -> 1
   | _ -> 0
 
@@ -315,6 +316,8 @@ lang DAEExprPrettyPrint = DAEParsePrettyPrintBase +
     daeBinOpToString ctx (daeExprPrecedence expr, "/", r.left, r.right)
   | expr & LtDAEExpr r ->
     daeBinOpToString ctx (daeExprPrecedence expr, "<", r.left, r.right)
+  | expr & LtfDAEExpr r ->
+    daeBinOpToString ctx (daeExprPrecedence expr, "<.", r.left, r.right)
   | expr & EqDAEExpr r ->
     daeBinOpToString ctx (daeExprPrecedence expr, "==", r.left, r.right)
   | expr & NegDAEExpr r ->

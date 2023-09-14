@@ -155,6 +155,7 @@ lang DAEParseDesugar = DAEAst
   | MulDAEExpr r -> daeDesugarBinOp r.info (CMulf ()) (r.left, r.right)
   | DivDAEExpr r -> daeDesugarBinOp r.info (CDivf ()) (r.left, r.right)
   | LtDAEExpr r -> daeDesugarBinOp r.info (CLti ()) (r.left, r.right)
+  | LtfDAEExpr r -> daeDesugarBinOp r.info (CLtf ()) (r.left, r.right)
   | EqDAEExpr r -> daeDesugarBinOp r.info (CEqi ()) (r.left, r.right)
   | NegDAEExpr r -> daeDesugarUnOp r.info (CNegf ()) r.right
   | MatchInDAEExpr r ->
