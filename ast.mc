@@ -18,7 +18,7 @@ include "./ast_gen.mc"
 
 type Res a = Result ErrorSection ErrorSection a
 
-let _daeAstKeywords = ["prim"]
+let _daeAstKeywords = ["dvar"]
 
 let dvarCmp = tupleCmp2 nameCmp subi
 
@@ -181,6 +181,9 @@ lang DAEAst = DAEParseAst + AstResult +
   | TmDVar r -> setInsert (r.ident, r.order) dvars
   | t -> sfold_Expr_Expr dvarsExpr dvars t
 
+  sem dvarCmp : (Name, Int) -> (Name, Int) -> Int
+  sem dvarCmp x =| y -> tupleCmp2 nameCmp subi x y
+
   sem dvars : Expr -> Set (Name, Int)
   sem dvars =| t -> dvarsExpr (setEmpty (tupleCmp2 nameCmp subi)) t
 
@@ -203,11 +206,11 @@ lang DAEAst = DAEParseAst + AstResult +
   | TmDVar _ -> true
 
   sem matchKeywordString (info : Info) =
-  | "prim" ->
+  | "dvar" ->
     Some (2, lam lst.
       match lst with [TmConst { val = CInt { val = order }}, TmVar r] then
         TmDVar (tmDVarRecToTmVarRec order r)
-      else errorSingle [info] "Invalid application use prim")
+      else errorSingle [info] "Invalid application use dvar")
 
 
   -- Eq
@@ -273,7 +276,7 @@ lang DAEAst = DAEParseAst + AstResult +
   | TmDVar r ->
     match tmVarRecToTmDVarRec r with (varr, order) in
     match pprintCode indent env (TmVar varr) with (env, var) in
-    (env, strJoin " " ["prim", int2string order, var])
+    (env, strJoin " " ["dvar", int2string order, var])
   | TmDAE r -> pprintCode indent env (_tmDAERecToTm r)
 
   sem getConstStringCode (indent : Int) =

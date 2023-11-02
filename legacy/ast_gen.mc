@@ -7984,7 +7984,7 @@ let _table =
                  {},
                rhs =
                  [ litSym
-                     "reclet",
+                     "letrec",
                    tokSym
                      (LIdentRepr
                         {}),
@@ -8285,7 +8285,7 @@ let _table =
                  {},
                rhs =
                  [ litSym
-                     "reclet",
+                     "letrec",
                    tokSym
                      (LIdentRepr
                         {}),

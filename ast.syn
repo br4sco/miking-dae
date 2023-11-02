@@ -52,7 +52,7 @@ prod MatchIn: DAEExpr =
 prod If: DAEExpr =
   "if" pred:DAEExpr "then" thn:DAEExpr "else" els:DAEExpr
 prod Let: DAEExpr = "let" name:LName "=" arg:DAEExpr "in" body:DAEExpr
-prod RecLet: DAEExpr = "reclet" name:LName "=" arg:DAEExpr "in" body:DAEExpr
+prod RecLet: DAEExpr = "letrec" name:LName "=" arg:DAEExpr "in" body:DAEExpr
 postfix Prim: DAEExpr = "'"
 
 -- Equations
@@ -62,8 +62,8 @@ prod Eqn: DAEEqn = left:DAEExpr "=" right:DAEExpr
 prod VarsDAEVar: DAEVar = names:LName ("," names:LName)* ":" ty:DAEType
 
 -- Top-level
-prod LetDAETop: DAETop = "let" name:LName "=" arg:DAEExpr "end"
-prod RecLetDAETop: DAETop = "reclet" name:LName "=" arg:DAEExpr "end"
+prod LetDAETop: DAETop = "let" name:LName "=" arg:DAEExpr "in"
+prod RecLetDAETop: DAETop = "letrec" name:LName "=" arg:DAEExpr "in"
 
 -- Program
 prod Prog: DAEProg =

@@ -14,6 +14,14 @@ let peadAstBuilder = lam info.
       frozen = false
     }
   in
+  let dvar_ = lam ident. lam n.
+    TmDVar {
+      ident = ident,
+      ty = tyunknown_,
+      order = n,
+      info = info
+    }
+  in
   let tyfloat_ = TyFloat { info = info } in
   let tytaylorcoef_ = lam n.
     -- tyRecord info (create (succ n) (lam i. (join ["c", int2string i], tyfloat_)))
@@ -195,6 +203,7 @@ let peadAstBuilder = lam info.
   {
     tyfloat = TyFloat { info = info },
     var = var_,
+    dvar = dvar_,
     tytaylorcoef = tytaylorcoef_,
     tydualnum = tydualnum_,
     taylorcoef = taylorcoef_,
