@@ -303,16 +303,24 @@ lang DAEAst = DAEParseAst + AstResult +
         env r.vars
       with (env, vars)
     in
-    -- TODO(oerikss, 2023-09-05): Check that only dependent variables appear
-    -- differentiated w.r.t. the independent variable.
-    TmDAE {
+    let t = TmDAE {
       r with
       bindings = bindings,
       vars = vars,
       ieqns = map (symbolizeExpr env) r.ieqns,
       eqns = map (symbolizeExpr env) r.eqns,
       out = symbolizeExpr env r.out
-    }
+    } in
+    let vars = mapFromSeq nameCmp vars in
+    recursive let inner = lam t.
+      match t with TmDVar r then
+        if mapMem r.ident vars then t
+        else
+          error
+            (strJoin " " [nameGetStr r.ident, "is not a dependent variable"])
+      else smap_Expr_Expr inner t
+    in
+    inner t
 
   -- Type Check
   sem typeCheckExpr env =
@@ -334,9 +342,11 @@ lang DAEAst = DAEParseAst + AstResult +
         r.vars
       with (env, vars)
     in
-    -- TODO(oerikss, 2023-08-31): Make sure residuals are scalars
     let ieqns = map (typeCheckExpr env) r.ieqns in
     let eqns = map (typeCheckExpr env) r.eqns in
+    iter
+      (lam eq. unify env [infoTm eq] (TyFloat { info = NoInfo ()}) (tyTm eq))
+      (concat ieqns eqns);
     let out = typeCheckExpr env r.out in
     TmDAE {
       r with
