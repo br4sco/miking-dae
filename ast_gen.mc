@@ -7984,7 +7984,7 @@ let _table =
                  {},
                rhs =
                  [ litSym
-                     "reclet",
+                     "letrec",
                    tokSym
                      (LIdentRepr
                         {}),
@@ -8238,7 +8238,7 @@ let _table =
                    ntSym
                      #var"DAEExpr",
                    litSym
-                     "end" ],
+                     "in" ],
                action =
                  lam state44: {errors: Ref [(Info, [Char])], content: String}.
                    lam res44.
@@ -8285,7 +8285,7 @@ let _table =
                  {},
                rhs =
                  [ litSym
-                     "reclet",
+                     "letrec",
                    tokSym
                      (LIdentRepr
                         {}),
@@ -8294,7 +8294,7 @@ let _table =
                    ntSym
                      #var"DAEExpr",
                    litSym
-                     "end" ],
+                     "in" ],
                action =
                  lam state45: {errors: Ref [(Info, [Char])], content: String}.
                    lam res45.

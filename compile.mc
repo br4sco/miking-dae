@@ -236,8 +236,8 @@ in
 logSetLogLevel logLevel.error;
 
 let dae = _parse "
-  let mul = lam x. lam y. x*y end
-  let pow2 = lam x. mul x x end
+  let mul = lam x. lam y. x*y in
+  let pow2 = lam x. mul x x in
   variables
   x, y, h : Float
   init

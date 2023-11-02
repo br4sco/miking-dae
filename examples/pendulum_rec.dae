@@ -1,7 +1,7 @@
-let mul = lam x. lam y. x*y end
-reclet pow = lam n. lam x.
+let mul = lam x. lam y. x*y in
+letrec pow = lam n. lam x.
   if n <. 1. then 1. else x * (pow (n - 1.) x)
-end
+in
 variables
 x, vx, y, vy, h, u, p : Float
 init

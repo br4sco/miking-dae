@@ -464,8 +464,8 @@ let parseDAEExprExn = lam prog. typeCheck (symbolize (parseDAEExprExn prog)) in
 logSetLogLevel logLevel.error;
 
 let prog = parseDAEProg "
-  let mul = lam x. lam y. x*y end
-  let pow2 = lam x. mul x x end
+  let mul = lam x. lam y. x*y in
+  let pow2 = lam x. mul x x in
   variables
   x, vx, y, vy, h : Float
   init
@@ -494,20 +494,20 @@ let expectedExpr = parseDAEExprExn "
   {
     ieqns =
       (subf x 1.,
-       subf (prim 1 vy) (subf 0. 1.)),
+       subf (dvar 1 vy) (subf 0. 1.)),
 
     eqns =
-      (subf vx (prim 1 x),
-       subf vy (prim 1 y),
-       subf (prim 1 vx) (mul x h),
-       subf (prim 1 vy) (subf (mul y h) 1.),
+      (subf vx (dvar 1 x),
+       subf vy (dvar 1 y),
+       subf (dvar 1 vx) (mul x h),
+       subf (dvar 1 vy) (subf (mul y h) 1.),
        subf (addf (pow2 x) (pow2 y)) (pow2 1.)),
 
     out =
       (
         x,
         vx,
-        prim 1 vx
+        dvar 1 vx
       )
   }
   "

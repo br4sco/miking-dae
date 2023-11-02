@@ -228,7 +228,7 @@ lang DAEExprPrettyPrint = DAEParsePrettyPrintBase +
     match daeVarNameToString ctx name with (ctx, name) in
     match daeExprToStringH ctx arg with (ctx, arg) in
     (ctx,
-     join [if rec then "reclet " else "let ", name, " = ", arg])
+     join [if rec then "letrec " else "let ", name, " = ", arg])
 
   sem daeBindingInToString
     : Bool -> DAEPPCtx -> (Name, DAEExpr, DAEExpr) -> (DAEPPCtx, String)
@@ -379,10 +379,10 @@ lang DAETopPrettyPrint = DAEParsePrettyPrintBase + DAEExprPrettyPrint +
   sem daeTopToStringH ctx =
   | LetDAETop r ->
     match daeBindingToString false ctx (r.name.v, r.arg) with (ctx, binding) in
-    (ctx, strJoin " " [binding, "end"])
+    (ctx, strJoin " " [binding, "in"])
   | RecLetDAETop r ->
     match daeBindingToString true ctx (r.name.v, r.arg) with (ctx, binding) in
-    (ctx, strJoin " " [binding, "end"])
+    (ctx, strJoin " " [binding, "in"])
 end
 
 

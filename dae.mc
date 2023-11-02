@@ -629,8 +629,8 @@ let utestToString = utestDefaultToString expr2str expr2str in
 -------------------
 
 let daer = _parseDAEProg "
-  let mul = lam x. lam y. x*y end
-  let pow2 = lam x. mul x x end
+  let mul = lam x. lam y. x*y in
+  let pow2 = lam x. mul x x in
   variables
   x, y, h : Float
   init
@@ -647,9 +647,9 @@ let daer = _parseDAEProg "
 in
 
 let daer2 = _parseDAEProg "
-  reclet pow = lam x. lam n.
+  letrec pow = lam x. lam n.
     if n < 1 then 1. else x * pow x (pred n)
-  end
+  in
   variables
   x, y, h, u: Float
   init
@@ -674,11 +674,11 @@ let expected = _parseAsTmDAE "
 let mul = lam x. lam y. mulf x y in
 let pow2 = lam x. mul x x in
 lam x: Float. lam y: Float. lam h: Float. {
-  ieqns = (subf (prim 0 x) 1., subf (prim 1 x) 2., subf (prim 2 y) (subf 0. 1.)),
-  eqns = (subf (prim 2 x) (mul (prim 0 x) (prim 0 h)),
-          subf (prim 2 y) (subf (mul (prim 0 y) (prim 0 h)) 1.),
-          subf (addf (pow2 (prim 0 x)) (pow2 (prim 0 y))) (pow2 1.)),
-  out = (prim 0 x, prim 1 x, prim 2 x)
+  ieqns = (subf (dvar 0 x) 1., subf (dvar 1 x) 2., subf (dvar 2 y) (subf 0. 1.)),
+  eqns = (subf (dvar 2 x) (mul (dvar 0 x) (dvar 0 h)),
+          subf (dvar 2 y) (subf (mul (dvar 0 y) (dvar 0 h)) 1.),
+          subf (addf (pow2 (dvar 0 x)) (pow2 (dvar 0 y))) (pow2 1.)),
+  out = (dvar 0 x, dvar 1 x, dvar 2 x)
 }
   "
 in
@@ -694,16 +694,16 @@ recursive
 in
 lam x: Float. lam y: Float. lam h: Float. lam u: Float. {
   ieqns =
-  (subf (prim 0 x) 1.
-    ,subf (prim 1 x) 2.
-    ,subf (prim 2 y) (subf 0. 1.)),
+  (subf (dvar 0 x) 1.
+    ,subf (dvar 1 x) 2.
+    ,subf (dvar 2 y) (subf 0. 1.)),
 
   eqns =
-  (subf (prim 2 x) (mulf (prim 0 x) (prim 0 h))
-  ,subf (prim 2 y) (subf (mulf (prim 0 y) (prim 0 h)) 1.)
-  ,subf (addf (mulf (prim 0 x) (prim 0 x)) (pow (prim 0 y) 2)) 1.
-  ,subf (prim 0 u) (addf (pow (prim 1 x) 2) (pow (prim 1 y) 2))),
-  out = (prim 0 x, prim 0 y)
+  (subf (dvar 2 x) (mulf (dvar 0 x) (dvar 0 h))
+  ,subf (dvar 2 y) (subf (mulf (dvar 0 y) (dvar 0 h)) 1.)
+  ,subf (addf (mulf (dvar 0 x) (dvar 0 x)) (pow (dvar 0 y) 2)) 1.
+  ,subf (dvar 0 u) (addf (pow (dvar 1 x) 2) (pow (dvar 1 y) 2))),
+  out = (dvar 0 x, dvar 0 y)
 }
   "
 in
@@ -776,15 +776,15 @@ let mulpp = lam xpp. lam ypp.
 in
 let pow2pp = lam xpp. mulpp xpp xpp in
 lam x: Float. lam y: Float. lam h:Float. {
-  ieqns = (subf (prim 0 x) 1., subf (prim 1 x) 2., subf (prim 2 y) (subf 0. 1.)),
-  eqns = (subf (prim 2 x) (mul (prim 0 x) (prim 0 h)),
-          subf (prim 2 y) (subf (mul (prim 0 y) (prim 0 h)) 1.),
+  ieqns = (subf (dvar 0 x) 1., subf (dvar 1 x) 2., subf (dvar 2 y) (subf 0. 1.)),
+  eqns = (subf (dvar 2 x) (mul (dvar 0 x) (dvar 0 h)),
+          subf (dvar 2 y) (subf (mul (dvar 0 y) (dvar 0 h)) 1.),
           ((lam x. lam y. (subf x.0 y.0, subf x.1 y.1, subf x.2 y.2))
             ((lam x. lam y. (addf x.0 y.0, addf x.1 y.1, addf x.2 y.2))
-               (pow2pp (prim 0 x, prim 1 x, prim 2 x))
-               (pow2pp (prim 0 y, prim 1 y, prim 2 y)))
+               (pow2pp (dvar 0 x, dvar 1 x, dvar 2 x))
+               (pow2pp (dvar 0 y, dvar 1 y, dvar 2 y)))
             (pow2pp (1., 0., 0.))).2),
-  out = (prim 0 x, prim 1 x, prim 2 x)
+  out = (dvar 0 x, dvar 1 x, dvar 2 x)
 }
   "
 in
@@ -819,23 +819,23 @@ recursive
 in
 lam x: Float. lam y: Float. lam h: Float. lam u: Float. {
   ieqns =
-  (subf (prim 0 x) 1., subf (prim 1 x) 2., subf (prim 2 y) (subf 0. 1.)),
+  (subf (dvar 0 x) 1., subf (dvar 1 x) 2., subf (dvar 2 y) (subf 0. 1.)),
 
   eqns =
-  (subf (prim 2 x) (mulf (prim 0 x) (prim 0 h)),
-   subf (prim 2 y) (subf (mulf (prim 0 y) (prim 0 h)) 1.)
+  (subf (dvar 2 x) (mulf (dvar 0 x) (dvar 0 h)),
+   subf (dvar 2 y) (subf (mulf (dvar 0 y) (dvar 0 h)) 1.)
   ,((lam x1. lam y1. (subf x1.0 y1.0, subf x1.1 y1.1, subf x1.2 y1.2))
       ((lam x2. lam y2. (addf x2.0 y2.0, addf x2.1 y2.1, addf x2.2 y2.2))
          ((lam x. lam y.
              (mulf x.0 y.0
              ,addf (mulf x.0 y.1) (mulf x.1 y.0)
              ,addf (addf (mulf x.0 y.2) (mulf 2. (mulf x.1 y.1))) (mulf x.2 y.0)))
-          (prim 0 x, prim 1 x, prim 2 x) (prim 0 x, prim 1 x, prim 2 x))
-         (powpp (prim 0 y, prim 1 y, prim 2 y) 2))
+          (dvar 0 x, dvar 1 x, dvar 2 x) (dvar 0 x, dvar 1 x, dvar 2 x))
+         (powpp (dvar 0 y, dvar 1 y, dvar 2 y) 2))
       (1., 0., 0.)).2
-  ,subf (prim 0 u) (addf (pow (prim 1 x) 2) (pow (prim 1 y) 2))),
+  ,subf (dvar 0 u) (addf (pow (dvar 1 x) 2) (pow (dvar 1 y) 2))),
 
-  out = (prim 0 x, prim 0 y)
+  out = (dvar 0 x, dvar 0 y)
 }
   "
 in
