@@ -69,11 +69,11 @@ lang DAEAst = DAEParseAst + AstResult +
   sem delta info =
   | (CSin _, [TmConst (cr & {val = CFloat fr})]) ->
     TmConst { cr with val = CFloat { fr with val = sin fr.val }, info = info }
-  | (CCos _, [TmConst {val = CFloat r}]) ->
+  | (CCos _, [TmConst (cr & {val = CFloat fr})]) ->
     TmConst { cr with val = CFloat { fr with val = cos fr.val }, info = info }
-  | (CSqrt _, [TmConst {val = CFloat r}]) ->
+  | (CSqrt _, [TmConst (cr & {val = CFloat fr})]) ->
     TmConst { cr with val = CFloat { fr with val = sqrt fr.val }, info = info }
-  | (CExp _, [TmConst {val = CFloat r}]) ->
+  | (CExp _, [TmConst (cr & {val = CFloat fr})]) ->
     TmConst { cr with val = CFloat { fr with val = exp fr.val }, info = info }
 
   sem tmVarRecToTmDVarRec
