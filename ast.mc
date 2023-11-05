@@ -65,20 +65,16 @@ lang DAEAst = DAEParseAst + AstResult +
       ("arrayGet", CArrayGet ())
     ]
 
-  -- PEval
+  -- (P)Eval
   sem delta info =
-  | (CSin _, [TmConst {val = CFloat r}]) ->
-    let b = astBuilder info in
-    b.float (sin r.val)
+  | (CSin _, [TmConst (cr & {val = CFloat fr})]) ->
+    TmConst { cr with val = CFloat { fr with val = sin fr.val }, info = info }
   | (CCos _, [TmConst {val = CFloat r}]) ->
-    let b = astBuilder info in
-    b.float (cos r.val)
+    TmConst { cr with val = CFloat { fr with val = cos fr.val }, info = info }
   | (CSqrt _, [TmConst {val = CFloat r}]) ->
-    let b = astBuilder info in
-    b.float (sqrt r.val)
+    TmConst { cr with val = CFloat { fr with val = sqrt fr.val }, info = info }
   | (CExp _, [TmConst {val = CFloat r}]) ->
-    let b = astBuilder info in
-    b.float (exp r.val)
+    TmConst { cr with val = CFloat { fr with val = exp fr.val }, info = info }
 
   sem tmVarRecToTmDVarRec
     : TmDVarRec -> ({ident : Name, ty : Type, info : Info, frozen : Bool}, Int)
