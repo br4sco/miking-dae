@@ -23,7 +23,7 @@ let daeID : (Name, Int) -> Name
         modref _daeIDMap (mapInsert id name daeIDMap);
         name
 
-lang DAE = DAEAst + MExprFreeVars + PEval + PEvalLetInline + MExprCSE + AD
+lang DAE = DAEAst + DAEPeval + MExprFreeVars + PEvalLetInline + MExprCSE + AD
   sem daeAnnotDVars : TmDAERec -> TmDAERec
   sem daeAnnotDVars =| dae ->
     let vars = mapFromSeq nameCmp dae.vars in

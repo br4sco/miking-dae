@@ -23,7 +23,7 @@ let _daeAstKeywords = ["dvar"]
 let dvarCmp = tupleCmp2 nameCmp subi
 
 lang DAEAst = DAEParseAst + AstResult +
-  MExprSym + MExprEq + MExprPrettyPrint + MExprTypeCheck + MExprPEval +
+  MExprSym + MExprEq + MExprPrettyPrint + MExprTypeCheck +
   BootParser + KeywordMaker
 
   type TmDVarRec = {
@@ -65,7 +65,7 @@ lang DAEAst = DAEParseAst + AstResult +
       ("arrayGet", CArrayGet ())
     ]
 
-  -- (P)Eval
+  -- Eval
   sem delta info =
   | (CSin _, [TmConst (cr & {val = CFloat fr})]) ->
     TmConst { cr with val = CFloat { fr with val = sin fr.val }, info = info }
@@ -182,20 +182,6 @@ lang DAEAst = DAEParseAst + AstResult +
 
   sem dvars : Expr -> Set (Name, Int)
   sem dvars =| t -> dvarsExpr (setEmpty (tupleCmp2 nameCmp subi)) t
-
-  -- PEval
-  sem pevalBindThis =
-  | TmDVar _ -> false
-  | TmApp {
-    lhs = TmApp {
-      lhs = TmConst { val = CArrayGet _},
-      rhs = TmVar _
-    },
-    rhs = TmConst { val = CInt _} | TmVar _
-  } -> false
-
-  sem pevalEval ctx k =
-  | TmDVar r -> k (TmDVar r)
 
   -- KeywordMaker
   sem isKeyword =
@@ -568,6 +554,22 @@ lang DAEAst = DAEParseAst + AstResult +
       with (annot, res)
     in
     result.withAnnotations annot (result.ok res)
+end
+
+lang DAEPeval = DAEAst + MExprPEval
+  -- PEval
+  sem pevalBindThis =
+  | TmDVar _ -> false
+  | TmApp {
+    lhs = TmApp {
+      lhs = TmConst { val = CArrayGet _},
+      rhs = TmVar _
+    },
+    rhs = TmConst { val = CInt _} | TmVar _
+  } -> false
+
+  sem pevalEval ctx k =
+  | TmDVar r -> k (TmDVar r)
 end
 
 mexpr
