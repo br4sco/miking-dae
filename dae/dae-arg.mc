@@ -14,7 +14,7 @@ type Options = {
   benchmarkJacobian : Bool
 }
 
-let defaultOptions = {
+let daeDefaultOptions = {
   debug = false,
   disableDebugStructure = false,
   disablePeval = false,

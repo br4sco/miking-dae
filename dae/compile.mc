@@ -35,6 +35,8 @@ lang DAECompile =
     match typeCheck (symbolize (TmDAE daer)) with
       TmDAE daer
     then
+      -- Get the type fo the output expression
+      let outTy = tyTm daer.out in
       -- Setup runtime
       let runtime =
         parseMCoreFile {
@@ -85,7 +87,6 @@ lang DAECompile =
           int2string
             (length (filter (neqi 0) analysis.eqnsOffset))
         ]);
-      -- let daer = if options.cse then daeDestructiveCSE daer else daer in
       let daer = daeIndexReduce analysis.eqnsOffset daer in
       let state = daeFirstOrderState analysis.varOffset in
       -- logDebug "first-order state"
@@ -107,7 +108,7 @@ lang DAECompile =
       let ts = [
         daeGenInitExpr state daer,
         daeGenResExpr daer,
-        daeGenOutExpr daer
+        daeGenOutExpr outTy daer
       ]
       in
       let pevalInlineLets = pevalInlineLets (sideEffectEnvEmpty ()) in
@@ -253,7 +254,7 @@ let dae = _parse "
   "
 in
 
-let t = daeCompile defaultOptions dae in
+let t = daeCompile daeDefaultOptions dae in
 
 logMsg logLevel.debug
   (lam. strJoin "\n" ["Output program:", expr2str t]);
