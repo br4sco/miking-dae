@@ -42,6 +42,15 @@ lang DAEAst = DAEParseAst + AstResult +
     info : Info
   }
 
+  syn Type =
+  | TyArrayFloat { info : Info }
+
+  sem tyWithInfo (info : Info) =
+  | TyArrayFloat r -> TyArrayFloat { r with info = info }
+
+  sem infoTy =
+  | TyArrayFloat r -> r.info
+
   syn Expr =
   -- x^(n) in MExpr
   | TmDVar TmDVarRec
@@ -347,8 +356,7 @@ lang DAEAst = DAEParseAst + AstResult +
 
   sem tyConst =
   | CSin _ | CCos _ | CSqrt _ | CExp _ -> tyarrows_ [tyfloat_, tyfloat_]
-  | CArrayGet _ ->
-    tyalls_ ["a", "b"] (tyarrows_ [tyvar_ "a", tyint_, tyvar_ "b"])
+  | CArrayGet _ -> tyarrows_ [TyArrayFloat { info = NoInfo ()}, tyint_, tyfloat_]
 
   sem addTopTypes : TCEnv -> Expr -> TCEnv
   sem addTopTypes env =

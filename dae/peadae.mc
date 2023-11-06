@@ -20,7 +20,7 @@ mexpr
 
 use PEADAE in
 
-switch argParse defaultOptions argConfig
+switch argParse daeDefaultOptions argConfig
 case ParseOK r then
   -- Print menu if not exactly one file argument
   if neqi (length r.strings) 1 then

@@ -207,8 +207,14 @@ lang DAE = DAEAst + DAEPeval + MExprFreeVars + PEvalLetInline + MExprCSE + AD
 
   sem daeOrderReduce : DAEFirstOrderState -> Name -> Name -> TmDAERec -> TmDAERec
   sem daeOrderReduce state y yp =| dae ->
-    let gety_ = lam i. appf2_ (uconst_ (CArrayGet ())) (nvar_ y) (int_ i) in
-    let getyp_ = lam i. appf2_ (uconst_ (CArrayGet ())) (nvar_ yp) (int_ i) in
+    let gety_ = lam i.
+      withType tyfloat_
+        (appf2_ (uconst_ (CArrayGet ())) (nvar_ y) (int_ i))
+    in
+    let getyp_ = lam i.
+      withType tyfloat_
+        (appf2_ (uconst_ (CArrayGet ())) (nvar_ yp) (int_ i))
+    in
     recursive let subs = lam t.
       match t with TmDVar r then
         theseThese
@@ -217,7 +223,10 @@ lang DAE = DAEAst + DAEPeval + MExprFreeVars + PEvalLetInline + MExprCSE + AD
       else smap_Expr_Expr subs t
     in
     match subs (TmDAE dae) with TmDAE dae then
-      let vars = [(y, tyseq_ tyfloat_), (yp, tyseq_ tyfloat_)] in
+      let vars = [
+        (y, TyArrayFloat { info = NoInfo () }),
+        (yp, TyArrayFloat { info = NoInfo () })
+      ] in
       let aliases = theseCatThese (mapValues state.indexMap) in
       let eqns = map (lam a. subf_ (gety_ a.0) (getyp_ a.1)) aliases in
       { dae with vars = vars, eqns = concat dae.eqns eqns }
@@ -231,7 +240,7 @@ lang DAE = DAEAst + DAEPeval + MExprFreeVars + PEvalLetInline + MExprCSE + AD
   sem daeGenInitExpr state =| dae ->
     let errMsg = _daeErrMsg "daeGenInitExpr" in
     match dae.vars with
-      [(y, TySeq {ty = TyFloat _}), (yp, TySeq {ty = TyFloat _})]
+      [(y, TyArrayFloat _), (yp, TyArrayFloat _)]
     then
       let errMsg = errMsg "Malformed initial equations" in
       -- Construct assignments from the inital equations
@@ -347,11 +356,19 @@ lang DAE = DAEAst + DAEPeval + MExprFreeVars + PEvalLetInline + MExprCSE + AD
     else
       error (errMsg "Not a first-order DAE" (TmDAE dae))
 
-  sem daeGenOutExpr : TmDAERec -> Expr
-  sem daeGenOutExpr =| dae ->
+  sem daeGenOutExpr : Type -> TmDAERec -> Expr
+  sem daeGenOutExpr ty =| dae ->
     let errMsg = _daeErrMsg "daeGenOutExpr" in
+    let logDebug = lam msg.
+      logMsg logLevel.debug
+        (lam.
+          strJoin "\n" [
+            join ["daeGenOutExpr"],
+            msg ()
+          ])
+    in
     match dae.vars with
-      [(y, TySeq {ty = TyFloat _}), (yp, TySeq {ty = TyFloat _})]
+      [(y, TyArrayFloat _), (yp, TyArrayFloat _)]
     then
       let defaultPrint = print_ (str_ "Cannot print output") in
       let genPrintWithCommaSep = lam ts.
@@ -367,8 +384,9 @@ lang DAE = DAEAst + DAEPeval + MExprFreeVars + PEvalLetInline + MExprCSE + AD
       in
       let _r  = nameSym "r" in
       let body =
-        switch tyTm dae.out
-        case TyFloat _ then print_ dae.out
+        switch ty
+        case TyFloat _ then
+          semi_ (print_ (float2string_ dae.out)) (print_ (str_ "\n"))
         case TyRecord r then
           let isFloatTy = lam ty. match ty with TyFloat _ then true else false in
           match record2tuple r.fields with Some tys then
@@ -392,7 +410,7 @@ lang DAE = DAEAst + DAEPeval + MExprFreeVars + PEvalLetInline + MExprCSE + AD
   sem daeGenResExpr =| dae ->
     let errMsg = _daeErrMsg "daeGenMutableResExpr" in
     match dae.vars with
-      [(y, TySeq {ty = TyFloat _}), (yp, TySeq {ty = TyFloat _})]
+      [(y, TyArrayFloat _), (yp, TyArrayFloat _)]
     then
       let r = nameSym "r" in
       bind_
@@ -412,7 +430,7 @@ lang DAE = DAEAst + DAEPeval + MExprFreeVars + PEvalLetInline + MExprCSE + AD
   sem daeJacStructure =| dae ->
     let errMsg = _daeErrMsg "daeJacYStructure" in
     match dae.vars with
-      [(y, TySeq {ty = TyFloat _}), (yp, TySeq {ty = TyFloat _})]
+      [(y, TyArrayFloat _), (yp, TyArrayFloat _)]
     then
       -- partially evaluate to get a more accurate structure. We top-level
       let eqns = map (lam eqn. peval (bind_ dae.bindings eqn)) dae.eqns in
@@ -455,7 +473,7 @@ lang DAE = DAEAst + DAEPeval + MExprFreeVars + PEvalLetInline + MExprCSE + AD
   sem _daeGenJac jacY =| dae ->
     let errMsg = _daeErrMsg "daeGenJacY" in
     match dae.vars with
-      [(y, TySeq {ty = TyFloat _}), (yp, TySeq {ty = TyFloat _})]
+      [(y, TyArrayFloat _), (yp, TyArrayFloat _)]
     then
       match
         (if jacY then (y, yp) else (yp, y)) with (y, yp)
@@ -526,7 +544,7 @@ lang DAE = DAEAst + DAEPeval + MExprFreeVars + PEvalLetInline + MExprCSE + AD
         (join ["daeGenMixedJac:phi = ", float2string phi, " is outside [0, 1]"])
     else
       match dae.vars with
-        [(y, TySeq {ty = TyFloat _}), (yp, TySeq {ty = TyFloat _})]
+        [(y, TyArrayFloat _), (yp, TyArrayFloat _)]
       then
         let pevalInlineLets = pevalInlineLets (sideEffectEnvEmpty ()) in
         let y = nameSetNewSym y in

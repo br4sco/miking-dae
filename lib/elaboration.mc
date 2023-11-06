@@ -6,21 +6,48 @@
   graph theory in multibody system dynamics.
  -/
 
-include "digraph.mc"
 include "char.mc"
 include "tuple.mc"
+include "set.mc"
 include "eqset.mc"
 
 include "./linear-graph.mc"
 
-type ElabGraph a b c = (Digraph a (b, c), b -> b -> Int, c -> c -> Int)
+type ElabGraph v t a = {
+  cmpv : v -> v -> Int,
+  cmpl : (t, a) -> (t, a) -> Int,
+  edges : [((v, v), (t, a))]
+}
+
+let elabGraphGetVertices : all v. all t. all a. ElabGraph v t a -> [v]
+  = lam g.
+    setToSeq
+      (foldl
+         (lam acc. lam e.
+           match e with ((v1, v2), _) in (setInsert v2 (setInsert v1 acc)))
+         (setEmpty g.cmpv)
+         g.edges)
+
+let elabGraphToDot
+  : all v. all t. all a. (v -> String) -> ((t, a) -> String) -> ElabGraph v t a -> String
+  = lam v2str. lam l2str. lam g.
+    join [
+      "digraph {\n",
+      strJoin "\n"
+        (map (lam e.
+          match e with ((v1, v2), l) in
+          join
+            ["  ", v2str v1, " -> ", v2str v2, " [label=\"", l2str l, "\"];"])
+           g.edges),
+      "\n}\n"
+    ]
 
 -- A sequence of terms/factors (c, v) with coefficients c that should be equal
 -- to zero (where the representation of zero depends on the type of
 -- v). Moreover, the operation to combine these terms/factors and coefficients
 -- depends on this type. E.g, for v:Float, the zero is 0, we combine the terms
 -- with addf, and c chould be interpreted as a float.
-type ElabEquation a = (a, [(LGEdge, a)])
+type ElabEquation a = (a, [(LGEdgeDirection, a)])
 
 -- Equality of equation with associative terms/factors.
 let elabEquationAssocEq
@@ -49,53 +76,39 @@ let elabEquationScalarToString : all a. (a -> String) -> ElabEquation a -> Strin
 
 -- Empty elaboration graph
 let elabGraphEmpty
-  : all a. all b. all c.
-    (a -> a -> Int) -> (b -> b -> Int) -> (c -> c -> Int) -> ElabGraph a b c
-  = lam cmpa. lam cmpb. lam cmpc.
-    let eql = lam x. lam y. and (eqi 0 (cmpb x.0 y.0)) (eqi 0 (cmpc x.1 y.1)) in
-    (digraphEmpty cmpa eql , cmpb, cmpc)
-
--- Returns a comparison function for edge labels.
-let elabGraphGetLabelCmp : all a. all b. all c. ElabGraph a b c -> (b, c) -> (b, c) -> Int
-  = lam g. match g with (_, cmpb, cmpc) in tupleCmp2 cmpb cmpc
-
--- Returns the underlying di-graph of an elaboration graph.
-let elabGraphGetDigraph : all a. all b. all c. ElabGraph a b c -> Digraph a (b, c)
-  = lam g. g.0
-
--- Sets the underlying di-graph of an elaboration graph.
-let elabGraphSetDigraph : all a. all b. all c.
-  Digraph a (b, c) -> ElabGraph a b c -> ElabGraph a b c
-  = lam d. lam g. (d, g.1, g.2)
+  : all v. all t. all a.
+    (v -> v -> Int) -> (t -> t -> Int) -> (a -> a -> Int) -> ElabGraph v t a
+  = lam cmpv. lam cmpa. lam cmpt.
+    { cmpv = cmpv, cmpl = tupleCmp2 cmpa cmpt, edges = [] }
 
 let elabGraphToIncidenceMatrix
-  : all a. all b. all c. [(b, c)] -> ElabGraph a b c -> (LGIMatrix, [a])
+  : all v. all t. all a. [(t, a)] -> ElabGraph v t a -> (LGIMatrix, [v])
   = lam terms. lam g.
     let labelIndexMap =
-      mapFromSeq (elabGraphGetLabelCmp g) (mapi (lam i. lam c. (c, i)) terms)
+      mapFromSeq g.cmpl (mapi (lam i. lam c. (c, i)) terms)
     in
-    let g = elabGraphGetDigraph g in
-    let vertices = digraphVertices g in
+    let vertices = elabGraphGetVertices g in
     let vertexIndexMap =
-      mapFromSeq (digraphCmpv g) (mapi (lam i. lam v. (v, i)) vertices)
+      mapFromSeq g.cmpv (mapi (lam i. lam v. (v, i)) vertices)
     in
-    let edges = digraphEdges g in
     let mat =
       foldl
         (lam mat. lam e.
-          match e with (v1, v2, l) in
-          let j = mapFindExn l labelIndexMap in
-          let mat = lgIMSet mat (mapFindExn v2 vertexIndexMap) j lgOutEdge in
-          lgIMSet mat (mapFindExn v1 vertexIndexMap) j lgInEdge)
-        (lgIMEmpty (length vertices) (length edges))
-        edges
+          match e with ((v1, v2), l) in
+          if eqi (g.cmpv v1 v2) 0 then mat -- Ignore self-loops
+          else
+            let j = mapFindExn l labelIndexMap in
+            let mat = lgIMSet mat (mapFindExn v2 vertexIndexMap) j lgOutEdge in
+            lgIMSet mat (mapFindExn v1 vertexIndexMap) j lgInEdge)
+        (lgIMEmpty (length vertices) (length terms))
+        g.edges
     in
     (mat, vertices)
 
 -- Elaborates elaboration graph to fundamental cutset and circuitset equations.
 let elab
-  : all a. all b. all c.
-    [(b, c)] -> ElabGraph a b c -> ([ElabEquation b], [ElabEquation c])
+  : all v. all t. all a.
+    [(t, a)] -> ElabGraph v t a -> ([ElabEquation t], [ElabEquation a])
   = lam terms. lam g.
     match elabGraphToIncidenceMatrix terms g with (mat, _) in
     match lgFCutCircSet mat terms with (circ, cut, terms) in
@@ -103,24 +116,27 @@ let elab
     match splitAt terms n with (cutterms, circterms) in
     match unzip circterms with (acrossterms, throughvars) in
     match unzip cutterms with (acrossvars, througterms) in
-    ( zipWith (lam a. lam cs. (a, (filter (lam t. neqi t.0 0)) (zip cs acrossterms))) acrossvars circ,
-      zipWith (lam t. lam cs. (t, (filter (lam t. neqi t.0 0)) (zip cs througterms))) throughvars cut)
+    (zipWith
+       (lam a. lam cs. (a, (filter (lam t. neqi t.0 0)) (zip cs acrossterms)))
+       acrossvars circ,
+     zipWith
+       (lam t. lam cs. (t, (filter (lam t. neqi t.0 0)) (zip cs througterms)))
+       throughvars cut)
 
 mexpr
   let e = lam l. (cons 'i' l, cons 'u' l) in
   let g = elabGraphEmpty cmpChar cmpString cmpString in
-  let d = elabGraphGetDigraph g in
-  let d = digraphAddVertices ['a', 'b', 'c', 'd', 'e', 'f'] d in
-  let d = digraphAddEdges [
-    ('a', 'b', e "L1"),
-    ('c', 'b', e "R3"),
-    ('f', 'a', e "V7"),
-    ('e', 'b', e "R4"),
-    ('c', 'd', e "C6"),
-    ('f', 'e', e "R5"),
-    ('e', 'd', e "L2")
-  ] d in
-  let g = elabGraphSetDigraph d g in
+  let g = {
+    g with edges = [
+      (('a', 'b'), e "L1"),
+      (('c', 'b'), e "R3"),
+      (('f', 'a'), e "V7"),
+      (('e', 'b'), e "R4"),
+      (('c', 'd'), e "C6"),
+      (('f', 'e'), e "R5"),
+      (('e', 'd'), e "L2")
+    ]
+  } in
   -- digraphPrintDot g (snoc []) (lam e. tail e.0);
   -- https://dot-to-ascii.ggerganov.com/ to visualize
   --                    ┌─────┐

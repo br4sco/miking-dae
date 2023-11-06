@@ -10,15 +10,15 @@ include "math.mc"
 include "map.mc"
 include "option.mc"
 
-type LGEdge = Int
+type LGEdgeDirection = Int
 -- Elements in the incidence matrix has one of these three values:
 let lgNoEdge = 0                -- missing edge.
 let lgInEdge = negi 1           -- incomming edge.
 let lgOutEdge = 1               -- outgoing edge.
 
 -- Sparse representation of the incidence matrix of the graph
-type LGIMMatrixRow = (Map Int LGEdge, Int)
-type LGIMatrix = (Map Int (Map Int LGEdge), (Int, Int))
+type LGIMMatrixRow = (Map Int LGEdgeDirection, Int)
+type LGIMatrix = (Map Int (Map Int LGEdgeDirection), (Int, Int))
 
 -- Equality of two incidence matrix rows.
 let lgIMRowEq : LGIMMatrixRow -> LGIMMatrixRow -> Bool
@@ -46,7 +46,7 @@ let _lgIMIdxInRange : LGIMatrix -> Int -> Int -> Bool
       (and (lti i dim.0) (lti i dim.1))
 
 -- Returns an element in an incidence matrix.
-let lgIMGet : LGIMatrix -> Int -> Int -> LGEdge
+let lgIMGet : LGIMatrix -> Int -> Int -> LGEdgeDirection
   = lam mat. lam i. lam j.
     if _lgIMIdxInRange mat i j then
       optionMapOr lgNoEdge
@@ -66,7 +66,7 @@ utest
   with ()
 
 -- Sets an element in an incidence matrix.
-let lgIMSet : LGIMatrix -> Int -> Int -> LGEdge -> LGIMatrix
+let lgIMSet : LGIMatrix -> Int -> Int -> LGEdgeDirection -> LGIMatrix
   = lam mat. lam i. lam j. lam v.
     if _lgIMIdxInRange mat i j then
       (mapUpdate i
@@ -144,7 +144,7 @@ utest
   with ()
 
 -- Creates a regular sequence of sequences from a incidence matrix.
-let lgIMToIntSeq : LGIMatrix -> [[LGEdge]]
+let lgIMToIntSeq : LGIMatrix -> [[LGEdgeDirection]]
   = lam mat. create (mat.1).0 (lam i. create (mat.1).1 (lam j. lgIMGet mat i j))
 
 utest
@@ -176,7 +176,7 @@ let lgIMUtestToString : LGIMatrix -> LGIMatrix -> String
   = utestDefaultToString lgIMToString lgIMToString
 
 -- Returns the index and value of the first non-zero column on the i'th row.
-let lgIMLeadingCol : LGIMatrix -> Int -> Option (Int, LGEdge)
+let lgIMLeadingCol : LGIMatrix -> Int -> Option (Int, LGEdgeDirection)
   = lam mat. lam i.
     optionBind (mapLookup i mat.0) mapGetMin
 
@@ -401,7 +401,7 @@ utest
 -- Retrieves the fundamental cutset and fundamenta circuit det from an incidence
 -- matrix.
 let lgFCutCircSet
-  : all a. LGIMatrix -> [a] -> ([[LGEdge]], [[LGEdge]], [a])
+  : all a. LGIMatrix -> [a] -> ([[LGEdgeDirection]], [[LGEdgeDirection]], [a])
   = lam mat. lam columnLabels.
     match mat with (_, (n, m)) in
     if eqi (length columnLabels) m then
