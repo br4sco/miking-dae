@@ -1,5 +1,34 @@
 include "parser/lexer.mc"
 
+lang BackslashTokenParser = TokenParser
+  syn Token =
+  | BackslashTok {info : Info}
+  syn TokenRepr =
+  | BackslashRepr ()
+
+  sem parseToken (pos : Pos) =
+  | "\\" ++ str ->
+    let pos2 = advanceCol pos 1 in
+    let info = makeInfo pos pos2 in
+    {token = BackslashTok {info = info}, lit = "\\", info = info, stream = {pos = pos2, str = str}}
+
+  sem tokKindEq (tokRepr : TokenRepr) =
+  | BackslashTok _ -> match tokRepr with BackslashRepr _ then true else false
+
+  sem tokInfo =
+  | BackslashTok {info = info} -> info
+
+  sem tokReprToStr =
+  | BackslashRepr _ -> "<Backslash>"
+
+  sem tokToStr =
+  | BackslashTok _ -> "<Backslash>"
+
+  sem tokToRepr =
+  | BackslashTok _ -> BackslashRepr ()
+end
+
+
 lang SemiSemiTokenParser = TokenParser
   syn Token =
   | SemiSemiTok {info : Info}
@@ -21,21 +50,7 @@ lang SemiSemiTokenParser = TokenParser
   sem tokToRepr =
   | SemiSemiTok _ -> SemiSemiRepr ()
 end
--- Eat multiline comment of the form /-  -/
-lang OCamlMultilineCommentParser = WSACParser
-  sem eatWSAC (p : Pos) =
-  | "(*" ++ xs ->
-    recursive
-    let remove = lam p. lam str. lam d.
-      match str with "(*" ++ xs then remove (advanceCol p 2) xs (addi d 1) else
-      match str with "\n" ++ xs then remove (advanceRow p 1) xs d else
-      match str with "*)" ++ xs then
-        if eqi d 1 then eatWSAC (advanceCol p 2) xs
-        else remove (advanceCol p 2) xs (subi d 1) else
-      match str with [_] ++ xs then remove (advanceCol p 1) xs d else
-      if eqi d 0 then eatWSAC p str else posErrorExit p "Unmatched multiline comments."
-    in remove (advanceCol p 2) xs 1
-end
+
 lang UnitTokenParser = TokenParser
   syn Token =
   | UnitTok {info : Info}
@@ -57,80 +72,71 @@ lang UnitTokenParser = TokenParser
   sem tokToRepr =
   | UnitTok _ -> UnitRepr ()
 end
-lang ArrayDelimTokenParser = TokenParser
+
+lang LUIdentTokenParser = TokenParser
   syn Token =
-  | LArrTok {info : Info}
-  | RArrTok {info : Info}
+  | LUIdentTok {info : Info, val : String}
   syn TokenRepr =
-  | LArrRepr ()
-  | RArrRepr ()
+  | LUIdentRepr ()
+
   sem parseToken (pos : Pos) =
-  | "[|" ++ str ->
-    let pos2 = advanceCol pos 2 in
-    let info = makeInfo pos pos2 in
-    {token = LArrTok {info = info}, lit = "[|", info = info, stream = {pos = pos2, str = str}}
-  | "|]" ++ str ->
-    let pos2 = advanceCol pos 2 in
-    let info = makeInfo pos pos2 in
-    {token = RArrTok {info = info}, lit = "|]", info = info, stream = {pos = pos2, str = str}}
+  | [(('_' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' |
+      'l' | 'm' | 'n' | 'o' | 'p' | 'q' | 'r' | 's' | 't' | 'u' | 'v' | 'w' |
+      'x' | 'y' | 'z' )
+    | ('A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' |
+       'L' | 'M' | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' |
+       'X' | 'Y' | 'Z' )) & c] ++ str ->
+    match parseIdentCont (advanceCol pos 1) str with {val = val, pos = pos2, str = str}
+    then
+      let val = cons c val in
+      let info = makeInfo pos pos2 in
+      { token = LUIdentTok {info = info, val = val}
+      , lit = val
+      , info = info
+      , stream = {pos = pos2, str = str}
+      }
+    else never
+
   sem tokKindEq (tokRepr : TokenRepr) =
-  | LArrTok _ -> match tokRepr with LArrRepr _ then true else false
-  | RArrTok _ -> match tokRepr with RArrRepr _ then true else false
+  | LUIdentTok _ -> match tokRepr with LUIdentRepr _ then true else false
+
   sem tokInfo =
-  | LArrTok {info = info} -> info
-  | RArrTok {info = info} -> info
+  | LUIdentTok {info = info} -> info
+
   sem tokReprToStr =
-  | LArrRepr _ -> "<LArr>"
-  | RArrRepr _ -> "<RArr>"
+  | LUIdentRepr _ -> "<LUIdent>"
+
   sem tokToStr =
-  | LArrTok _ -> "<LArr>"
-  | RArrTok _ -> "<RArr>"
+  | LUIdentTok tok -> concat "<LUIdent>" tok.val
+
   sem tokToRepr =
-  | LArrTok _ -> LArrRepr ()
-  | RArrTok _ -> RArrRepr ()
+  | LUIdentTok _ -> LUIdentRepr ()
 end
-lang CharOrTickTokenParser = TokenParser
+
+lang PrimeTokenParser = TokenParser
   syn Token =
-  | CharTok {info : Info, val : Char}
-  | TickTok {info : Info}
+  | PrimeTok {info : Info}
   syn TokenRepr =
-  | CharRepr ()
-  | TickRepr ()
-  sem parseToken (pos : Pos) =
+  | PrimeRepr ()
+
+  sem parseToken pos =
   | "'" ++ str ->
-    let postTickPos = advanceCol pos 1 in
-    let charRet = if null str then None () else
-      match matchChar postTickPos str with {val = val, pos = pos2, str = str} in
-      match str with "'" ++ str then
-        let pos2 = advanceCol pos2 1 in
-        let info = makeInfo pos pos2 in
-        Some
-        { token = CharTok {info = info, val = val}
-        , lit = ""
-        , info = info
-        , stream = {pos = pos2, str = str}
-        }
-      else None () in
-    match charRet with Some r then r else
-    let info = makeInfo pos postTickPos in
-    { token = TickTok {info = info}
-    , lit = "'"
-    , info = info
-    , stream = {pos = postTickPos, str = str}
-    }
-  sem tokKindEq (tokRepr : TokenRepr) =
-  | CharTok _ -> match tokRepr with CharRepr _ then true else false
-  | TickTok _ -> match tokRepr with TickRepr _ then true else false
+    let pos2 = advanceCol pos 1 in
+    let info = makeInfo pos pos2 in
+    {token = PrimeTok {info = info}, lit = "'", info = info, stream = {pos = pos2, str = str}}
+
+  sem tokKindEq tokRepr =
+  | PrimeTok _ -> match tokRepr with PrimeRepr _ then true else false
+
   sem tokInfo =
-  | CharTok {info = info} -> info
-  | TickTok {info = info} -> info
+  | PrimeTok x -> x.info
+
   sem tokReprToStr =
-  | CharRepr _ -> "<Char>"
-  | TickRepr _ -> "<Tick>"
+  | PrimeRepr _ -> "'"
+
   sem tokToStr =
-  | CharTok tok -> snoc "<Char>" tok.val
-  | TickTok tok -> snoc "<Tick>" tok.val
+  | PrimeTok _ -> "'"
+
   sem tokToRepr =
-  | CharTok _ -> CharRepr ()
-  | TickTok _ -> TickRepr ()
+  | PrimeTok _ -> PrimeRepr ()
 end

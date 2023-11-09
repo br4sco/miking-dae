@@ -1,0 +1,208 @@
+language EOO
+
+start EOOProg
+
+type EOOProg
+type EOOTop
+type EOOParam
+type EOODefBinding
+type EOOModelBinding
+type EOOExpr {
+  grouping = "(" ")",
+}
+type EOOPat {
+  grouping = "(" ")",
+}
+type EOOType {
+  grouping = "(" ")",
+}
+type EOOModelHead
+
+-- Program
+prod Prog: EOOProg =
+  tops:EOOTop*
+  "main" "model"
+  heads:EOOModelHead*
+  (eqnkw:"equation" eqn:EOOExpr)
+  "output" output:EOOExpr
+  "end"
+
+-- Top
+prod DefEOOTop : EOOTop =
+  "def" binding:EOODefBinding "end"
+prod ModelEOOTop : EOOTop =
+  "model" binding:EOOModelBinding "end"
+prod TypeEOOTop : EOOTop =
+  "type" n:UName (params:LName)* "=" rhs:EOOType
+
+-- Parameters
+prod PatEOOParam : EOOParam = "(" pat:EOOPat ")"
+prod NameEOOParam : EOOParam = n:LName | n:UName
+prod IgnoreEOOParam : EOOParam = "_"
+
+-- Def Bindings
+prod Simple : EOODefBinding =
+  (n:LName | n: UName)
+  (":" ty:EOOType "def" (n2:LName | n2: UName))?
+  params:EOOParam* "=" rhs:EOOExpr
+
+-- Model Bindings
+prod SimpleEOOModelBinding : EOOModelBinding =
+  (n:LName | n: UName)
+  (":" ty:EOOType "model" (n2:LName | n2: UName))?
+  params:EOOParam* "=" heads:EOOModelHead* eqnkw:"equation" eqn:EOOExpr
+
+-- Exprs
+prod Var : EOOExpr = n:LName | n:UName
+prod Abs : EOOExpr = "\\" param:EOOParam (":" ty:EOOType)? "." body:EOOExpr
+infix left App : EOOExpr = empty
+prod Num : EOOExpr = (i:UInt | f:Float)
+prod String : EOOExpr = v:String
+prod True : EOOExpr = "true"
+prod False : EOOExpr = "false"
+prod Unit : EOOExpr = "()"
+infix left Tup : EOOExpr = ","
+infix right Concat : EOOExpr = op:";"
+infix right Cons : EOOExpr = op:"::"
+prod Seq : EOOExpr = "[" unbrokenElems:EOOExpr? "]"
+prod Let : EOOExpr =
+  "let" pat:EOOPat (":" ty:EOOType)? "=" rhs:EOOExpr
+  "in" body:EOOExpr
+prod Def : EOOExpr =
+  "def" binding:EOODefBinding
+  "in" body:EOOExpr
+prod If : EOOExpr = "if" c:EOOExpr "then" t:EOOExpr "else" e:EOOExpr
+prod Matching : EOOExpr =
+  "begin" "match" scrut:EOOExpr "with"
+    "|"? arms:{pat:EOOPat "->" body:EOOExpr}
+    arms:{"|" pat:EOOPat "->" body:EOOExpr}*
+  "end"
+
+infix left Addf : EOOExpr = op:"+"
+infix left Subf : EOOExpr = op:"-"
+infix left Mulf : EOOExpr = op:"*"
+infix left Divf : EOOExpr = op:"/"
+
+-- Model Exprs
+postfix Prim : EOOExpr = op:"'"
+infix Eqn : EOOExpr = op:"="
+prefix Init : EOOExpr = "initial"
+prod Connect : EOOExpr =
+  "connect" from:EOOExpr "to" to:EOOExpr "in" dom:EOOExpr
+  "with" across:EOOExpr "across" through:EOOExpr "through"
+prod Model : EOOExpr =
+  "model"
+  heads:EOOModelHead*
+  eqnkw:"equation"
+  eqn:EOOExpr
+
+prod VarEOOModelHead : EOOModelHead =
+   "var" (ns:LName | ns:UName) ("," ns:LName | ns:UName)* ":" ty:EOOType
+prod NodeEOOModelHead : EOOModelHead =
+   "node" (ns:LName | ns:UName) ("," ns:LName | ns:UName)*
+prod DefEOOModelHead : EOOModelHead =
+   "def" binding:EOODefBinding "end"
+prod ModelEOOModelHead : EOOModelHead =
+   "model" binding:EOOModelBinding "end"
+
+precedence {
+  Prim;
+  App;
+  Mulf Divf;
+  Addf Subf;
+  Eqn;
+  Init;
+  Cons Concat;
+  Tup;
+  If;
+  Model Let Def Abs;
+}
+
+-- Patterns
+prod WildEOOPat : EOOPat = "_"
+prod BindEOOPat : EOOPat = n:LName | n:UName
+prod UnitEOOPat : EOOPat = "()"
+infix left TupEOOPat : EOOPat = ","
+infix right ConsEOOPat : EOOPat = "::"
+prod SeqEOOPat : EOOPat = "[" elems:EOOPat "]"
+
+precedence {
+  ConsEOOPat;
+  TupEOOPat;
+}
+
+-- Types
+prod VarEOOType : EOOType = n:LName
+prod ConEOOType : EOOType = n:UName
+infix left AppEOOType : EOOType = empty
+infix left TupEOOType : EOOType = "*"
+prod SeqEOOType : EOOType = "[" ty:EOOType "]"
+infix right ArrowEOOType : EOOType = "->"
+prefix ForallEOOType : EOOType = "forall" ns:LName+ "."
+
+precedence {
+  ForallEOOType;
+  AppEOOType;
+  TupEOOType;
+  ArrowEOOType;
+}
+
+-------------------------------------------------------------------
+
+include "./lib/eoo-lexer.mc"
+
+-- Basic tokens
+token String {
+  repr = StringRepr {},
+  constructor = StringTok,
+  fragment = StringTokenParser,
+  ty = String,
+}
+token UInt {
+  repr = IntRepr {},
+  constructor = IntTok,
+  fragment = UIntTokenParser,
+  ty = Int,
+}
+token Float {
+  repr = FloatRepr {},
+  constructor = FloatTok,
+  fragment = UFloatTokenParser,
+}
+token LIdent {
+  repr = LIdentRepr {},
+  constructor = LIdentTok,
+  fragment = LIdentTokenParser,
+  ty = String,
+}
+token UIdent {
+  repr = UIdentRepr {},
+  constructor = UIdentTok,
+  fragment = UIdentTokenParser,
+  ty = String,
+}
+-- Wrapping tokens that just change the type in the AST
+token LName {
+  base = LIdent,
+  wrap = nameNoSym,
+  ty = Name,
+}
+token UName {
+  base = UIdent,
+  wrap = nameNoSym,
+  ty = Name,
+}
+
+-- Token types only used through literals
+token {fragment = OperatorTokenParser,}
+token {fragment = CommaTokenParser,}
+token {fragment = SemiTokenParser,}
+token {fragment = BracketTokenParser,}
+token {fragment = UnitTokenParser,}
+token {fragment = BackslashTokenParser,}
+token {fragment = PrimeTokenParser,}
+
+-- Whitespace and comments
+token {fragment = LineCommentParser,}
+token {fragment = MultilineCommentParser,}
+token {fragment = WhitespaceParser,}
