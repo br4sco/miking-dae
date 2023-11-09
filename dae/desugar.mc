@@ -11,7 +11,7 @@ include "mexpr/builtin.mc"
 include "./ast_gen.mc"
 include "./parse.mc"
 
-lang DAEParseDesugar = DAEAst
+lang DAEParseDesugar = DAEAst + DAEParseAst
   sem daeDesugarType : DAEType -> Type
   sem daeDesugarType =
   | FloatDAEType r -> TyFloat { info = r.info }

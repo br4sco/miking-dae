@@ -2,10 +2,12 @@ include "mexpr/ast-builder.mc"
 include "mexpr/const-types.mc"
 include "mexpr/ast.mc"
 
-let tymodelfragment_ = tycon_ "ModelFragment"
+let tyequation_ = tycon_ "Equation"
+let tymodeldomain_ = tycon_ "ModelDomain"
+let tynode_ = tycon_ "Node"
 
-lang EOOCoreAst = Ast
-  -- Extended builtins
+lang EOOCoreAst = MExprAst
+  -- Extended constants
   syn Const =
   | CDotf {}
   | CGenDynVarf {}
@@ -32,8 +34,9 @@ lang EOOCoreAst = Ast
 
   sem eooCoreBuiltinTypes : () -> [(String, [String])]
   sem eooCoreBuiltinTypes =| _ -> [
-    ("ModelFragment", []),
-    ("ModelDomain", ["a", "b"])
+    ("Equation", []),
+    ("ModelDomain", []),
+    ("Node", [])
   ]
 
   sem constArity =
@@ -46,8 +49,8 @@ lang EOOCoreAst = Ast
   sem tyConst =
   | CDotf _ -> tyarrows_ [tyint_, tyfloat_, tyfloat_]
   | CGenDynVarf _ -> tyarrow_ tystr_ tyfloat_
-  | CEqnf _ -> tyarrows_ [tyfloat_, tyfloat_, tymodelfragment_]
-  | CIEqnf _ -> tyarrows_ [tyfloat_, tyfloat_, tymodelfragment_]
+  | CEqnf _ -> tyarrows_ [tyfloat_, tyfloat_, tyequation_]
+  | CIEqnf _ -> tyarrows_ [tyfloat_, tyfloat_, tyequation_]
   | CEdgeff _ ->
-    (tyarrows_ [tysym_, tysym_, tysym_, tyfloat_, tyfloat_, tymodelfragment_])
+    (tyarrows_ [tysym_, tysym_, tysym_, tyfloat_, tyfloat_, tyequation_])
 end

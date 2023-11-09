@@ -1,0 +1,93 @@
+type Model = [Equation]
+type Node = Symbol
+
+def Electrical = gensym () end
+
+--------------
+-- Resistor --
+--------------
+
+-- Resistor model component where `R` is the resistance, `u` is the voltage
+-- over, and `i` the current through, from `cathode` to `anode`.
+model ResistorOutput : Real * Node * Node * Real * Real -> Model
+model ResistorOutput(R, cathode, anode, u, i) =
+equation
+  u = R * i;
+  connect cathode to anode in Electrical with u across i through
+end
+
+-- Resistor not exposing the voltage and current.
+model Resistor(R, cathode, anode) =
+  var uR, iR : Real
+equation
+  ResistorOutput(R, cathode, anode, uR, iR)
+end
+
+
+--------------
+-- Inductor --
+--------------
+
+-- Inductor model component where `L` is the inductance, `u` is the voltage
+-- over, and `i` the current through, from `cathode` to `anode`.
+model InductorOutput : Real * Node * Node * Real * Real -> Model
+model InductorOutput(L, cathode, anode, u, i) =
+equation
+  u = L * i';
+  connect cathode to anode in Electrical with u across i through
+end
+
+-- Inductor not exposing the voltage and current.
+model Inductor(L, cathode, anode) =
+  var uL, iL : Real
+equation
+  InductorOutput(L, cathode, anode, uL, iL)
+end
+
+
+---------------
+-- Capacitor --
+---------------
+
+-- Capacitor model component where `C` is the capacitance, `u` is the voltage
+-- over, and `i` the current through, from `cathode` to `anode`.
+model CapacitorOutput : Real * Node * Node * Real * Real -> Model
+model CapacitorOutput(C, cathode, anode, u, i) =
+equation
+  u' = C * i;
+  connect cathode to anode in Electrical with u across i through
+end
+
+-- Capacitor not exposing the voltage and current.
+model Capacitor(C, cathode, anode) =
+  var uC, iC : Real
+equation
+  CapacitorOutput(C, cathode, anode, uC, iC)
+end
+
+
+--------------------
+-- Voltage Source --
+--------------------
+
+-- Voltage source model component where `u` is the voltage from the `cathode`
+-- to the `anode`.
+model VoltageSource : Real * Node * Node -> Model
+model VoltageSource(u, cathode, anode) =
+  var iVs : Real
+equation
+  connect cathode to anode in Electrical with u across iVs through
+end
+
+
+--------------------
+-- Voltage Sensor --
+--------------------
+
+-- Voltage sensor model component `u` is the measured voltage from the `cathode`
+-- to the `anode`.
+model VoltageSensor : Real * Node * Node -> Model
+model VoltageSensor(u, cathode, anode) =
+equation
+  connect cathode to anode in Electrical with u across 0. through
+end

@@ -1,0 +1,15 @@
+
+main model
+  def R = 0.3 end
+  def L = 0.2 end
+  def C = 0.1 end
+  node n1, n2, n3
+  var iL, uL : Real
+equation
+  initial iL = 1.;
+  Resistor(R, n1, n2);
+  InductorOutput(L, n2, n3, uL, iL);
+  Capacitor(C, n3, n1)
+output
+  (iL, uL)
+end

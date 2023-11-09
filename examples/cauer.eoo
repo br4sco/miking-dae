@@ -1,0 +1,36 @@
+
+def serialize : Int -> (Node * Node -> Model) -> ((Node * Node) -> Model)
+def serialize n f (n1, n2) =
+    let ns =
+      create (subi n 1) (\i. if eqi i (subi n 2) then n2 else gensym ())
+    in
+    let (eqns, n2) = foldl
+      (\acc. \n1. let (eqns, n2) = acc in (eqns; f (n1, n2), n1))
+      ([], n1) ns
+    in
+    eqns
+end
+
+main model
+  def R = 1. end
+  def L = 1. end
+  def C = 1. end
+  def k = 10 end
+  node n1, n2, n3
+  var uIn, uOut, t : Real
+  model Section(n1, n2) = equation
+    Inductor(L, n1, n2);
+    Capacitor(C, n2, n3)
+  end
+equation
+  initial t = 0.;
+  t' = 1.;
+  uIn = 1. / (1. + exp (0. - t));
+  VoltageSource(uIn, n1, n2);
+  serialize k Section (n1, n2);
+  Capacitor(C, n3, n2);
+  Resistor(R, n3, n2);
+  VoltageSensor(uOut, n3, n2)
+output
+  (uIn, uOut)
+end

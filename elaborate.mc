@@ -1,51 +1,79 @@
+/-
+
+  This file contains the implementation of elaboration of EOO models. The
+  elaboration consists of two steps, flattening and graph elaboration.
+
+  - Flattening means transforming a EOO program to a seqence of equations and
+    graphs thats encodes the topology of the model (i.e. which components are
+    connected in the EOO model).
+
+  - Graph elaboration means taking the model graphs and producing additional
+    equations based on energy conservation laws. Together with the equations
+    already present, these form a consistent DAE if the elaboration is
+    successful.
+
+-/
+
 include "mexpr/ast-builder.mc"
 include "mexpr/cmp.mc"
 include "mexpr/pprint.mc"
 
 include "./ast.mc"
-include "./lib/elaboration.mc"
+include "./lib/elaboration.mc"  -- Algorithms and data structures related to the
+                                -- graph elaboration lives here
 include "./dae/ast.mc"
 include "./dae/ad.mc"
 
-type EOOEdgeType
-con EOOEdgeScalar : () -> EOOEdgeType
-con EOOEdgeVector3 : () -> EOOEdgeType
-con EOOEdgeSO3 : () -> EOOEdgeType
-con EOOEdgeQuaternion : () -> EOOEdgeType
+-- The graph elaboration dependes type of the across and through quantity
+-- associated with a particular edge.
+type EOOQuantityType
+con EOOQuantityScalar : () -> EOOQuantityType
+con EOOQuantityVector3 : () -> EOOQuantityType
+con EOOQuantitySO3 : () -> EOOQuantityType -- rotational matrices
+con EOOQuantityQuaternion : () -> EOOQuantityType
 
-let eooEdgeTypeToString : EOOEdgeType -> String
+let eooQuantityTypeToString : EOOQuantityType -> String
   = lam e.
     switch e
-    case EOOEdgeScalar _ then "ℝ"
-    case EOOEdgeVector3 _ then "ℝ³"
-    case EOOEdgeSO3 _ then "SO(3)"
-    case EOOEdgeQuaternion _ then "Q"
+    case EOOQuantityScalar _ then "ℝ"
+    case EOOQuantityVector3 _ then "ℝ³"
+    case EOOQuantitySO3 _ then "SO(3)"
+    case EOOQuantityQuaternion _ then "Q"
     end
 
+-- Intermediate representation and operations on a flat EOO model
 lang FlatEOO = Cmp + PrettyPrint
-  type FlatEOORec = {
+
+  -- An EOO model graph consists of an elaboration graph and the types of its
+  -- across and through quantities.
+  type EOOGraph = {
+    acrossType : EOOQuantityType,
+    throughType : EOOQuantityType,
+    graph : ElabGraph Symbol Expr Expr
+  }
+
+  -- This datastructure encodes the representation of a flat EOO model
+  type FlatEOO = {
     bindings : Expr,
     vars : [(Name, Type)],
     ieqns : [Expr],
     eqns : [Expr],
     out : Expr,
-    graphs : [{
-      acrossType : EOOEdgeType,
-      throughType : EOOEdgeType,
-      graph : ElabGraph Symbol Expr Expr
-    }]
+    graphs : [EOOGraph]
   }
 
+  sem flatEOOElabGraphEmpty : () -> ElabGraph Symb Expr Expr
   sem flatEOOElabGraphEmpty =| () ->
     elabGraphEmpty (lam x. lam y. subi (sym2hash x) (sym2hash y)) cmpExpr cmpExpr
 
+  sem flatEOOElabGraphToDot : ElabGraph Symb Expr Expr -> String
   sem flatEOOElabGraphToDot expr2str =| g ->
     elabGraphToDot
       (lam v. int2string (sym2hash v))
       (lam e. join ["(", expr2str e.0, ",", expr2str e.1, ")"])
       g.graph
 
-  sem flatEOOToString : FlatEOORec -> String
+  sem flatEOOToString : FlatEOO -> String
   sem flatEOOToString =| eoo ->
     match
       mapAccumL
@@ -72,20 +100,22 @@ lang FlatEOO = Cmp + PrettyPrint
         (map
            (lam g.
              strJoin "\n" [join [
-               "edgeType: (",
-               eooEdgeTypeToString g.acrossType,
+               "quantityType: (",
+               eooQuantityTypeToString g.acrossType,
                ",",
-               eooEdgeTypeToString g.throughType,
+               eooQuantityTypeToString g.throughType,
                ")"
              ], flatEOOElabGraphToDot expr2str g])
            eoo.graphs)
     ]
 
-  sem flatEOOElaborate : FlatEOORec -> FlatEOORec
-  sem flatEOOElaborate =| eoo ->
-    let rhs = lam eType. lam rhs.
-      switch eType
-      case EOOEdgeScalar _ then
+  -- Elaborates all model graphs and augments the equations of the EOO with the
+  -- resulting balance equations.
+  sem eooElaborateGraphs : FlatEOO -> FlatEOO
+  sem eooElaborateGraphs =| eoo ->
+    let rhs = lam qType. lam rhs.
+      switch qType
+      case EOOQuantityScalar _ then
         foldl
           (lam acc. lam t.
             match t with (c, t) in
@@ -151,65 +181,91 @@ lang EOOCoreElaborate = EOOCoreAst + FlatEOO + AD +
   | TmDynamic t ->
     match smapAccumL_Expr_Expr f acc t with (acc, t) in (acc, TmDynamic t)
 
-  sem flatten : Expr -> FlatEOORec
-  sem flatten =| t ->
-    let errorSingle = lam t.
-      errorSingle [infoTm t] (strJoin "\n" ["Unable to flatten", expr2str t])
-    in
-    let symCmp = lam x. lam y. subi (sym2hash x) (sym2hash y) in
-    let t = readback (eval (evalCtxEmpty ()) t) in
-    recursive let gatherDynamicVariables = lam vars. lam t.
-      match t with TmDVar r then
-        mapInsert r.ident r.ty vars
-      else sfold_Expr_Expr gatherDynamicVariables vars t
-    in
-    recursive let inner = lam acc. lam t.
-      switch t
-      case TmApp {
-        lhs = TmApp {
-          lhs = TmConst {val = CEqnf _},
-          rhs = lhs},
-        rhs = rhs}
-      then
-        { acc with eqns = cons (subf_ lhs rhs) acc.eqns }
-      case TmApp {
-        lhs = TmApp {
-          lhs = TmConst { val = CIEqnf _},
-          rhs = lhs},
-        rhs = rhs}
-      then
-        { acc with ieqns = cons (subf_ lhs rhs) acc.ieqns }
-      case TmApp {
+  sem containsDynamic : Bool -> Expr -> Bool
+  sem containsDynamic acc =
+  | TmDynamic _ -> true
+  | t -> sfold_Expr_Expr containsDynamic acc t
+
+  -- Collects all dynamic variable names that appear in an
+  -- expression. Internally calls `eooGatherDynVarsExpr` which is suitable for
+  -- extension.
+  sem eooGatherDynVars : Expr -> Map Name Type
+  sem eooGatherDynVars =| t ->
+    eooGatherDynVarsExpr (mapEmpty nameCmp) t
+
+  sem eooGatherDynVarsExpr : Map Name Type -> Expr -> Map Name Type
+  sem eooGatherDynVarsExpr vars =
+  | TmDVar r -> mapInsert r.ident r.ty vars
+  | t -> sfold_Expr_Expr eooGatherDynVarsExpr vars t
+
+  type EqnsAndEdgesAcc =
+    {ieqns : [Expr], eqns : [Expr], graphs : Map Symbol EOOGraph}
+
+  -- Gathers an equation or an edge from a single expression. Returns `None ()`
+  -- if the expression does not encode neither an equation nor an edge.
+  sem eooGatherEqnsAndEdges : EqnsAndEdgesAcc -> Expr -> Option EqnsAndEdgesAcc
+  sem eooGatherEqnsAndEdges acc =
+  | TmApp {
+    lhs = TmApp {
+      lhs = TmConst {val = CEqnf _},
+      rhs = lhs},
+    rhs = rhs}
+    -> Some { acc with eqns = cons (subf_ lhs rhs) acc.eqns }
+  | TmApp {
+    lhs = TmApp {
+      lhs = TmConst { val = CIEqnf _},
+      rhs = lhs},
+    rhs = rhs}
+    -> Some { acc with ieqns = cons (subf_ lhs rhs) acc.ieqns }
+  | TmApp {
+    lhs = TmApp {
+      lhs = TmApp {
         lhs = TmApp {
           lhs = TmApp {
-            lhs = TmApp {
-              lhs = TmApp {
-                lhs = TmConst {val = CEdgeff _},
-                rhs = TmConst {val = CSymb {val = dom}}},
-              rhs = TmConst {val = CSymb {val = n1}}},
-            rhs = TmConst {val = CSymb {val = n2}}},
-          rhs = across},
-        rhs = through}
-      then
-        let e = ((n1, n2), (through, across)) in
-        let graphs =
-          mapInsertWith
-            (lam g1. lam g2. {
-              g1 with graph = {
-                g1.graph with edges = concat g1.graph.edges g2.graph.edges
-              }})
-            dom
-            ({
-              acrossType = EOOEdgeScalar (),
-              throughType = EOOEdgeScalar (),
-              graph = { elabGraphEmpty symCmp cmpExpr cmpExpr with edges = [e] }
-            })
-            acc.graphs
-        in
-        { acc with graphs = graphs }
-      case t then errorSingle t
-      end
+            lhs = TmConst {val = CEdgeff _},
+            rhs = TmConst {val = CSymb {val = dom}}},
+          rhs = TmConst {val = CSymb {val = n1}}},
+        rhs = TmConst {val = CSymb {val = n2}}},
+      rhs = across},
+    rhs = through}
+    ->
+    let symCmp = lam x. lam y. subi (sym2hash x) (sym2hash y) in
+    let e = ((n1, n2), (through, across)) in
+    let graphs =
+      mapInsertWith
+        (lam g1. lam g2. {
+          g1 with graph = {
+            g1.graph with edges = concat g1.graph.edges g2.graph.edges
+          }})
+        dom
+        ({
+          acrossType = EOOQuantityScalar (),
+          throughType = EOOQuantityScalar (),
+          graph = { elabGraphEmpty symCmp cmpExpr cmpExpr with edges = [e] }
+        })
+        acc.graphs
     in
+    Some { acc with graphs = graphs }
+  | _ -> None ()
+
+  -- Produces a flat EOO IR from an EOO program by partially evaluating the
+  -- input expression. The input expression must be of type
+  -- `([Equation], a)` and the partial evaluation must result in an expression
+  -- `([e1, ..., en], e)`, where `e1` to `en` encodes either equations or edges.
+  --
+  -- Produces an error if the flattening is unsuccessful. This can occur, e.g.,
+  -- if branch predicates involves dynamic variables.
+  sem eooFlatten : Expr -> FlatEOO
+  sem eooFlatten =| t ->
+    let errorSingle = lam t.
+      errorSingle [infoTm t] (strJoin "\n" ["Unable to flatten"])
+    in
+    let symCmp = lam x. lam y. subi (sym2hash x) (sym2hash y) in
+    -- Partially evaluate the input expression
+    let t = readback (eval (evalCtxEmpty ()) t) in
+    -- We now expect the residual program to be on the form:
+    -- `([e1, ..., en], e)`, where `e1` to `en` encodes either equations or
+    -- edges.
     match t with TmRecord r then
       match
         (mapLookup (stringToSid "0") r.bindings,
@@ -217,9 +273,12 @@ lang EOOCoreElaborate = EOOCoreAst + FlatEOO + AD +
         with
         (Some (TmSeq r), Some out)
       then
-        let vars = mapBindings (gatherDynamicVariables (mapEmpty nameCmp) t) in
+        let vars = mapBindings (eooGatherDynVars t) in
         let acc =
-          foldl inner { ieqns = [], eqns = [], graphs = mapEmpty symCmp } r.tms
+          foldl
+            (lam acc. lam t.
+              optionGetOrElse (lam. errorSingle t) (eooGatherEqnsAndEdges acc t))
+            { ieqns = [], eqns = [], graphs = mapEmpty symCmp } r.tms
         in
         {
           bindings = unit_,
@@ -232,6 +291,22 @@ lang EOOCoreElaborate = EOOCoreAst + FlatEOO + AD +
       else errorSingle t
     else errorSingle t
 
+  -- The MExpr evaluator extended with dynamic terms that allows partial
+  -- evaluation of a subset of pure MCore. The implementation uses the
+  -- eval/readback approach of Benjamin Grégoire and Xavier Leroy. 2002. A
+  -- compiled implementation of strong reduction
+  -- (https://doi.org/10.1145/581478.581501). Notably the implementation does
+  -- not allow recursion to guarantee termination.
+  --
+  -- Moreover, the partial evaluation is extended to perform symbolic
+  -- differentation of applications of the `CDotf` constant by partially
+  -- evaluating a forward mode AD source-code transformation.
+  --
+  -- Note that this partial evaluator does not preserve sharing to simplify the
+  -- structural analysis needed by the DAE compilation. In typical EOO program
+  -- the `CDotf` constant is applied directly on dynamic variables and therefore
+  -- expression swell that results from symbolic differentation in this manner
+  -- is not major concern.
   sem eval ctx =
   | TmDynamic t -> TmDynamic t
   | TmNever r ->  TmDynamic (TmNever r)
@@ -241,7 +316,7 @@ lang EOOCoreElaborate = EOOCoreAst + FlatEOO + AD +
     match tryMatch ctx.env target r.pat with Some newEnv then
       eval { ctx with env = newEnv } r.thn
     else
-      match target with TmDynamic target then
+      if containsDynamic false r.target then
         TmDynamic (TmMatch { r with target = target })
       else eval ctx r.els
 
@@ -269,10 +344,12 @@ lang EOOCoreElaborate = EOOCoreAst + FlatEOO + AD +
 
   sem readback : Expr -> Expr
   sem readback =
+  -- NOTE(oerikss, 2023-11-11): We place the symbolic differentation here to not
+  -- make eval and readback mutally recursive.
   | TmDynamic (TmConstApp (r & {
     const = CDotf _, args = [TmConst {val = CInt {val = n}}, t]
   })) ->
-    if lti n 0 then error "Invalid application"
+    if lti n 0 then errorSingle [r.info] "Invalid application"
     else
       if eqi n 0 then readback t
       else
@@ -309,6 +386,10 @@ lang EOOCoreElaborate = EOOCoreAst + FlatEOO + AD +
 
   sem readbackPat : EvalEnv -> Pat -> (EvalEnv, Pat)
   sem readbackPat env =
+  -- NOTE(oerikss, 2023-11-11): Here we take a conservative approach and
+  -- consider all bound variables in a dynamic match dynamic. A more granular
+  -- implementation can treat a subset of the matched expressions as static and
+  -- update the environment accordingly.
   | PatNamed (r & {ident = PName name}) ->
     let newname = nameSetNewSym name in
     let newvar = TmVar {

@@ -22,7 +22,7 @@ let _daeAstKeywords = ["dvar"]
 
 let dvarCmp = tupleCmp2 nameCmp subi
 
-lang DAEAst = DAEParseAst + AstResult +
+lang DAEAst = AstResult + ParseDAEParse +
   MExprSym + MExprEq + MExprPrettyPrint + MExprTypeCheck +
   BootParser + KeywordMaker
 

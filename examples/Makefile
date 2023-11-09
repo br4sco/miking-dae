@@ -1,8 +1,10 @@
-TOOL_NAME=eoocore
+CORE_TOOL_NAME=eoocore
+CORE_TOOL_COMMAND := ../build/${CORE_TOOL_NAME}
 
+TOOL_NAME=eoo
 TOOL_COMMAND := ../build/${TOOL_NAME}
 
-OKS := rlc.dae.OK
+OKS := rlc_eoocore.OK cauer_eoocore.OK rlc_eoo.OK cauer_eoo.OK
 EXES := $(OKS:.OK=.exe)
 DAES := $(OKS:.OK=.mc)
 
@@ -29,8 +31,13 @@ test: $(OKS) $(EXES) $(DAES)
 %.out.expected: %.out
 	mv $< $@
 
-%.dae.mc: %.eoo.mc
-	@$(TOOL_COMMAND) $< > $@
+%_eoocore.mc: %.eoocore.mc
+	@$(CORE_TOOL_COMMAND) $< > $@
+
+%_eoo.mc: %.eoo
+	@cat lib.eoo $< > src.eoo;
+	@$(TOOL_COMMAND) src.eoo > $@;
+	@rm src.eoo
 
 clean:
-	rm -rf *.exe *.out *.dae.mc *.OK
+	rm -rf *.exe *.out *_eoocore.mc *_eoo.mc src.eoo *.OK

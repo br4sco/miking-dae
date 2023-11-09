@@ -1,14 +1,8 @@
 include "arg.mc"
 
-include "mexpr/symbolize.mc"
-include "mexpr/type-check.mc"
 include "mexpr/boot-parser.mc"
 
-include "./ast.mc"
-include "./elaborate.mc"
-include "./lib/elaboration.mc"
-include "./dae/ast.mc"
-include "./dae/compile.mc"
+include "./compile.mc"
 
 type Options = {
   debug : Bool
@@ -31,17 +25,13 @@ let usage = lam prog. join [
   "\n"
 ]
 
-lang EOOCoreLang =
-  EOOCoreAst + DAEAst + EOOCoreElaborate +
-  MExprSym + MExprPrettyPrint + MExprTypeCheck + MExprCmp + BootParser
-end
-
-lang TyAnnotFull = MExprPrettyPrint + TyAnnot + HtmlAnnotator
+lang EOOCoreLangMain =
+  EOOCoreLang + MExprPrettyPrint + BootParser
 end
 
 mexpr
 
-use EOOCoreLang in
+use EOOCoreLangMain in
 
 switch argParse eoocoreDefaultOptions argConfig
 case ParseOK r then
@@ -60,54 +50,11 @@ case ParseOK r then
       builtin = join [builtin, daeBuiltin (), eooCoreBuiltin ()]
     } file in
 
-    -- Symbolize
-    let symEnv = {
-      symEnvEmpty with
-      tyConEnv =
-        mapUnion
-          symEnvEmpty.tyConEnv
-          (mapFromSeq cmpString
-             (map (lam t. (t.0, nameNoSym t.0)) (eooCoreBuiltinTypes ())))
-    } in
-    let ast = symbolizeExpr symEnv ast in
-
-    -- Type-Check
-    let tcEnv = {
-      _tcEnvEmpty with
-      tyConEnv =
-        mapUnion
-          _tcEnvEmpty.tyConEnv
-          (mapFromSeq nameCmp
-             (map
-                (lam t.
-                  (nameNoSym t.0, (0, map nameSym t.1, tyvariant_ [])))
-                (eooCoreBuiltinTypes ())))
-    } in
-    let ast = typeCheckExpr tcEnv ast in
-
-    -- Flatten
-    let eoo = flatten ast in
-
-    -- Eloborate Edges
-    let eoo = flatEOOElaborate eoo in
-
-    -- Compile DAE
+    -- Compile EOO program
     let ast =
-      use DAECompile in
-      let daer = {
-        bindings = eoo.bindings,
-        vars = eoo.vars,
-        ieqns = eoo.ieqns,
-        eqns = eoo.eqns,
-        out = eoo.out,
-        info = NoInfo ()
-      } in
-      daeCompile
-        {
-          daeDefaultOptions with
-          debug = r.options.debug
-        }
-        daer
+      eooCoreCompile
+        { eooCoreCompileOptionsDefault () with debug = r.options.debug }
+        ast
     in
 
     -- Output MCore program to stdout
