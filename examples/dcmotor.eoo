@@ -1,0 +1,21 @@
+
+main model
+  def R = 1. end
+  def L = 0.5 end
+  def Ku = 0.1 end
+  def Kta = 0.1 end
+  def G = 1.0 end
+  def d = 0.1 end
+  def J = 0.01 end
+  var t, uIn, thOut : Real
+  node p
+equation
+  t' = 1.;
+  uIn = sin(t);
+  DCMotor(R, L, G, Ku, Kta, uIn, world, p);
+  Damper(d, world, p);
+  Inertia(J, p);
+  AngleSensor(thOut, world, p)
+output
+  (uIn, thOut)
+end

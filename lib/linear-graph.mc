@@ -5,6 +5,8 @@
 -- constraints and/or McPhee, J.J. On the use of linear graph theory in
 -- multibody system dynamics.
 
+include "common.mc"
+include "string.mc"
 include "utest.mc"
 include "math.mc"
 include "map.mc"
@@ -13,16 +15,28 @@ include "option.mc"
 type LGEdgeDirection = Int
 -- Elements in the incidence matrix has one of these three values:
 let lgNoEdge = 0                -- missing edge.
-let lgInEdge = negi 1           -- incomming edge.
-let lgOutEdge = 1               -- outgoing edge.
+let lgOutEdge = negi 1           -- incomming edge.
+let lgInEdge = 1               -- outgoing edge.
 
 -- Sparse representation of the incidence matrix of the graph
 type LGIMMatrixRow = (Map Int LGEdgeDirection, Int)
 type LGIMatrix = (Map Int (Map Int LGEdgeDirection), (Int, Int))
 
+-- Show Incidence matrix as string
+let lgIMToString : LGIMatrix -> String
+  = lam mat.
+    strJoin "\n"
+      (map
+         (lam r.
+           join [
+             int2string r.0, "\t: ",
+             strJoin "," (map int2string (unzip (mapBindings r.1)).1)
+           ])
+         (mapBindings mat.0))
+
 -- Equality of two incidence matrix rows.
 let lgIMRowEq : LGIMMatrixRow -> LGIMMatrixRow -> Bool
-  = lam l. lam r. and (mapEq eqi l.0 r.0) (eqi l.1 r.1)
+  = lam l. lam r. and (eqi l.1 r.1) (mapEq eqi l.0 r.0)
 
 -- Creates a n x m matrix with no incidence.
 let lgIMEmpty : Int -> Int -> LGIMatrix = lam n. lam m. (mapEmpty subi, (n, m))
@@ -86,16 +100,16 @@ let lgIMSet : LGIMatrix -> Int -> Int -> LGEdgeDirection -> LGIMatrix
 
 utest
   let mat = lgIMEmpty 2 3 in
-  let mat = lgIMSet mat 0 0 lgInEdge in
+  let mat = lgIMSet mat 0 0 lgOutEdge in
   let mat = lgIMSet mat 0 0 lgNoEdge in
-  let mat = lgIMSet mat 0 2 lgInEdge in
-  let mat = lgIMSet mat 1 2 lgOutEdge in
+  let mat = lgIMSet mat 0 2 lgOutEdge in
+  let mat = lgIMSet mat 1 2 lgInEdge in
   utest lgIMGet mat 0 0 with lgNoEdge in
   utest lgIMGet mat 0 1 with lgNoEdge in
-  utest lgIMGet mat 0 2 with lgInEdge in
+  utest lgIMGet mat 0 2 with lgOutEdge in
   utest lgIMGet mat 1 0 with lgNoEdge in
   utest lgIMGet mat 1 1 with lgNoEdge in
-  utest lgIMGet mat 1 2 with lgOutEdge in
+  utest lgIMGet mat 1 2 with lgInEdge in
   ()
   with ()
 
@@ -108,7 +122,7 @@ let lgIMRowOfIntSeq : [Int] -> LGIMMatrixRow
          if eqi e 0 then acc
          else
            mapInsert j
-             (if lti e 0 then lgInEdge else lgOutEdge)
+             (if lti e 0 then lgOutEdge else lgInEdge)
              acc)
        (mapEmpty subi)
        seq
@@ -136,10 +150,10 @@ utest
   ] in
   utest lgIMGet mat 0 0 with lgNoEdge in
   utest lgIMGet mat 0 1 with lgNoEdge in
-  utest lgIMGet mat 0 2 with lgInEdge in
+  utest lgIMGet mat 0 2 with lgOutEdge in
   utest lgIMGet mat 1 0 with lgNoEdge in
   utest lgIMGet mat 1 1 with lgNoEdge in
-  utest lgIMGet mat 1 2 with lgOutEdge in
+  utest lgIMGet mat 1 2 with lgInEdge in
   ()
   with ()
 
@@ -153,8 +167,8 @@ utest
     [0, 0, 2]
   ] in
   utest lgIMToIntSeq mat with [
-    [lgNoEdge, lgNoEdge, lgInEdge],
-    [lgNoEdge, lgNoEdge, lgOutEdge]
+    [lgNoEdge, lgNoEdge, lgOutEdge],
+    [lgNoEdge, lgNoEdge, lgInEdge]
   ] in
   ()
   with ()
@@ -186,29 +200,28 @@ utest
     [0, 2, 0],
     [0, 0, 0]
   ] in
-  utest lgIMLeadingCol mat 0 with Some (2, lgInEdge) in
-  utest lgIMLeadingCol mat 1 with Some (1, lgOutEdge) in
+  utest lgIMLeadingCol mat 0 with Some (2, lgOutEdge) in
+  utest lgIMLeadingCol mat 1 with Some (1, lgInEdge) in
   utest lgIMLeadingCol mat 2 with None () in
   ()
   with ()
+
+let _addRowData =
+  mapMerge
+    (lam lhs. lam rhs.
+      switch (lhs, rhs)
+      case (Some lhs, Some rhs) then
+        let v = maxi (mini (addi lhs rhs) 1) (negi 1) in
+        if eqi v 0 then None () else Some v
+      case (Some e, _) | (_, Some e) then Some e
+      case _ then lhs
+      end)
 
 -- Adds two rows, elementwise.
 let lgIMAddRows : LGIMMatrixRow -> LGIMMatrixRow -> LGIMMatrixRow
   = lam lhs. lam rhs.
     match (lhs, rhs) with ((ldata, ln), (rdata, rn)) in
-    if eqi ln rn then
-      (mapMerge
-         (lam lhs. lam rhs.
-           switch (lhs, rhs)
-           case (Some lhs, Some rhs) then
-             let v = maxi (mini (addi lhs rhs) 1) (negi 1) in
-             if eqi v 0 then None () else Some v
-           case (Some e, _) | (_, Some e) then Some e
-           case _ then lhs
-           end)
-         ldata
-         rdata
-      , ln)
+    if eqi ln rn then (_addRowData ldata rdata , ln)
     else error "lgIMAddRows: length missmatch"
 
 utest
@@ -225,24 +238,23 @@ utest
   ()
   with ()
 
+let _subRowData =
+  mapMerge
+    (lam lhs. lam rhs.
+      switch (lhs, rhs)
+      case (Some lhs, Some rhs) then
+        let v = maxi (mini (subi lhs rhs) 1) (negi 1) in
+        if eqi v 0 then None () else Some v
+      case (Some e, _) then Some e
+      case (_, Some e) then Some (negi e)
+      case _ then lhs
+      end)
+
 -- Subtracts two rows, elementwise.
 let lgIMSubRows : LGIMMatrixRow -> LGIMMatrixRow -> LGIMMatrixRow
   = lam lhs. lam rhs.
     match (lhs, rhs) with ((ldata, ln), (rdata, rn)) in
-    if eqi ln rn then
-      (mapMerge
-         (lam lhs. lam rhs.
-           switch (lhs, rhs)
-           case (Some lhs, Some rhs) then
-             let v = maxi (mini (subi lhs rhs) 1) (negi 1) in
-             if eqi v 0 then None () else Some v
-           case (Some e, _) then Some e
-           case (_, Some e) then Some (negi e)
-           case _ then lhs
-           end)
-         ldata
-         rdata
-      , ln)
+    if eqi ln rn then (_subRowData ldata rdata , ln)
     else error "lgIMSubRows: length missmatch"
 
 utest
@@ -264,9 +276,9 @@ let lgIMNegRow : LGIMMatrixRow -> LGIMMatrixRow
   = lam row.
     (mapMap
        (lam e.
-         if lti e 0 then lgOutEdge
+         if lti e 0 then lgInEdge
          else
-           if gti e 0 then lgInEdge
+           if gti e 0 then lgOutEdge
            else error "lgIMNegRow: Illformed row") row.0
     , row.1)
 
@@ -286,7 +298,7 @@ utest
 let lgIMRowReduce : LGIMatrix -> LGIMatrix
   = lam mat.
     match mat with (data, dim) in
-    recursive let recur = lam i. lam j. lam data.
+    recursive let rowEchelon = lam i. lam j. lam data.
       if or (geqi i dim.0) (geqi j dim.1) then data
       else
         if mapMem i data then
@@ -320,8 +332,8 @@ let lgIMRowReduce : LGIMatrix -> LGIMatrix
           case [] then
             -- The remining elements in this column are already zero, move to
             -- the next column.
-            recur i (succ j) data
-          case [((k, v), pivotRow)] ++ rows then
+            rowEchelon i (succ j) data
+          case ([((k, v), pivotRow)] ++ rows) then
             -- Change sign if leading element is negative
             let pivotRow =
               if lti v 0 then lgIMNegRow pivotRow else pivotRow
@@ -329,7 +341,7 @@ let lgIMRowReduce : LGIMatrix -> LGIMatrix
             -- Pivot
             let tmpRow = mapFindExn i data in
             let data = mapInsert i pivotRow.0 (mapInsert k tmpRow data) in
-            -- zero all elements in the j'th column, below the i'th row
+            -- zero all elements in the j'th column
             let data =
               foldl
                 (lam data. lam row.
@@ -346,15 +358,41 @@ let lgIMRowReduce : LGIMatrix -> LGIMatrix
                 data
                 rows
             in
-            recur (succ i) (succ j) data
+            rowEchelon (succ i) (succ j) data
           end
-        else recur (succ i) (succ j) data
+        else rowEchelon (succ i) (succ j) data
     in
-    let data = recur 0 0 data in
+    -- Put on row-echelon form
+    let data = rowEchelon 0 0 data in
     -- trim zero rows
     match dim with (_, m) in
     let rows = filter (lam row. not (mapIsEmpty row)) (mapValues data) in
     let n = length rows in
+    -- Row Reduce
+    recursive let recur = lam acc. lam rest.
+      if null rest then acc
+      else
+        let row = head rest in
+        let rest = tail rest in
+        match mapGetMin row with Some (j, _) then
+          let rest =
+            map
+              (lam orow.
+                switch mapLookup j orow
+                case Some v then
+                  if eqi v 1 then _subRowData orow row
+                  else
+                    if eqi v (negi 1) then _addRowData orow row
+                    else error "Malformed Incidence Matrix"
+                case None _ then orow
+                end)
+              rest
+          in
+          recur (cons row acc) rest
+        else
+          error "Singular matrix"
+    in
+    let rows = recur [] (reverse rows) in
     let data = mapFromSeq subi (mapi (lam i. lam row. (i, row)) rows) in
     (data, (n, m))
 
@@ -393,6 +431,16 @@ utest
     [0, 0, 1, 0, 1, 0, 0],
     [0, 0, 0, 1, negi 1, 0, 1],
     [0, 0, 0, 0, 0, 1, 1]
+  ] in
+  utest lgIMRowReduce mat with expected using lgIMEq else lgIMUtestToString in
+  let mat = lgIMOfIntSeq [
+    [0, 1, negi 1],
+    [1, negi 1, 0],
+    [negi 1, 0, 1]
+  ] in
+  let expected = lgIMOfIntSeq [
+    [1, 0, negi 1],
+    [0, 1, negi 1]
   ] in
   utest lgIMRowReduce mat with expected using lgIMEq else lgIMUtestToString in
   ()
@@ -493,6 +541,19 @@ utest
     [1, 0, 0, negi 1, negi 1]
   ], [
     "L1", "L2", "R3", "R4", "R5", "C6", "V7"
+  ]) in
+  let mat = lgIMOfIntSeq [
+    [0, 1, negi 1],
+    [1, negi 1, 0],
+    [negi 1, 0, 1]
+  ] in
+  utest lgFCutCircSet mat ["R", "L", "C"] with ([
+    [negi 1],
+    [negi 1]
+  ], [
+    [1, 1]
+  ], [
+    "R", "L", "C"
   ]) in
   ()
   with ()

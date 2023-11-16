@@ -52,6 +52,7 @@ lang EOOLangMain =
       ("slli", CSlli ()),
       ("srli", CSrli ()),
       ("srai", CSrai ()),
+      ("int2float", CInt2float ()),
       -- float operations
       ("add", CAddf ()),
       ("sub", CSubf ()),

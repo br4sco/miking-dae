@@ -1,0 +1,23 @@
+main model
+  def n = 10 end
+  def nf = int2float(n) end
+  def J = 3. / nf end
+  def k = 3. / nf end
+  def d = 2. / nf end
+  model ShaftElement(p1, p2) =
+  equation
+    Spring(k, p1, p2);
+    Damper(d, p1, p2);
+    Inertia(J, p2)
+  end
+  var t, thOut, taIn : Real
+  node point1, point2
+equation
+  t' = 1.;
+  taIn = t * sin(t);
+  serialize 9 ShaftElement(point1, point2);
+  AngleSensor(thOut, world, point2);
+  TorqueActuator(taIn, world, point1)
+output
+  (taIn, thOut)
+end
