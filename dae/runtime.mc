@@ -58,6 +58,7 @@ type Options = {
   stepSize : Float,
   rtol : Float,
   atol : Float,
+  idaIC : Bool,
   outputOnlyLast : Bool,
   benchmarkResidual : Option Int,
   benchmarkJacobian : Option Int,
@@ -71,6 +72,7 @@ let defaultOptions = {
   stepSize = 0.1,
   rtol = 1e-4,
   atol = 1e-6,
+  idaIC = true,
   outputOnlyLast = false,
   debug = false,
   dumpInfo = false,
@@ -90,6 +92,9 @@ let argConfig = [
   ([("--atol", " ", "<value>")],
    "Absolute tolerance. ",
    lam p. { p.options with atol = argToFloatMin p 0. }),
+  ([("--disable-idaic", "", "")],
+   "Disable IDAs consistent initial value search. ",
+   lam p. { p.options with idaIC = false }),
   ([("--output-only-last", "", "")],
    "Output only the solution after the last time-step. ",
    lam p. { p.options with outputOnlyLast = true }),
@@ -290,7 +295,7 @@ let daeRuntimeRun
            (lam i. if get varids i then idaVarIdDifferential
                  else idaVarIdAlgebraic))
     in
-    let t0 = negf 1.e-4 in
+    let t0 = if opt.idaIC then negf 1.e-4 else 0. in
     let s = idaInit {
       tol      = tol,
       nlsolver = nlsolver,
@@ -302,11 +307,13 @@ let daeRuntimeRun
       y        = v,
       yp       = vp
     } in
-    idaCalcICYaYd s { tend = 0., y = v, yp = vp };
-    resf y yp r;
-    debugPrint
-      (lam. strJoin "\n"
-            ["After idaCalcICYaYd:", stateToString y yp, vecToString "r" r]);
+    (if opt.idaIC then
+      idaCalcICYaYd s { tend = 0., y = v, yp = vp };
+      resf y yp r;
+      debugPrint
+        (lam. strJoin "\n"
+              ["After idaCalcICYaYd:", stateToString y yp, vecToString "r" r])
+     else ());
     idaSetStopTime s opt.interval;
     -- Solve
     -- Pre-allocate output states

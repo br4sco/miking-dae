@@ -1,0 +1,45 @@
+
+main model
+  def L = 0.5 end               -- H
+  def R = 1.0 end               -- Ohm
+  def Ku = 0.01 end             -- V/rad/s
+  def Kta = 0.01 end            -- Nm/Amp
+  def G = 1.0 end               -- Unit-less
+  def n = 10 end
+  def nf = int2float n end
+  def J = 0.1 / nf end          -- kgm^2
+  def k = 0.1 / nf end          -- Nm/rad
+  def d = 0.1 / nf end          -- Nms
+  def JEnd = 1.0 end            -- kgm^2
+  def Kp = 2. end
+  def Ki = 0.05 end
+  def Kd = 0.01 end
+  def r = 1. end
+  def DCMotor(u, p1, p2) = DCMotor(R, L, G, Ku, Kta, u, p1, p2) end
+  model Controller(err, out) =
+    var Err : Real
+  equation
+    Err' = err;
+    -- out = Kp * err + Ki * Err + Kd * err'
+    out = Kp * err + Ki * Err
+    -- out = Kp * err + Kd * err'
+  end
+  model ShaftElement(p1, p2) = equation
+    Spring(k, p1, p2);
+    Damper(d, p1, p2);
+    Inertia(J, p2)
+  end
+  node pEnd, p1, p2, n1, n2
+  var uIn, thOut, omOut : Real
+equation
+  -- initial t' = 1.;
+  -- t' = 1.;
+  omOut = thOut';
+  DCMotor(uIn, world, p1);
+  serialize n ShaftElement (p1, pEnd);
+  Inertia(JEnd, pEnd);
+  AngleSensor(thOut, world, pEnd);
+  Controller(r - omOut, uIn)
+output
+  (uIn, r - omOut)
+end

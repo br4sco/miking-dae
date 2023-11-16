@@ -66,12 +66,16 @@ lang FlatEOO = Cmp + PrettyPrint
   sem flatEOOElabGraphEmpty =| () ->
     elabGraphEmpty (lam x. lam y. subi (sym2hash x) (sym2hash y)) cmpExpr cmpExpr
 
-  sem flatEOOElabGraphToDot : ElabGraph Symb Expr Expr -> String
-  sem flatEOOElabGraphToDot expr2str =| g ->
+  sem flatEOOElabGraphEdgeLabelToString : (Expr, Expr) -> String
+  sem flatEOOElabGraphEdgeLabelToString =| e ->
+    join ["(", expr2str e.0, ",", expr2str e.1, ")"]
+
+  sem flatEOOElabGraphToDot : ElabGraph Symbol Expr Expr -> String
+  sem flatEOOElabGraphToDot =| g ->
     elabGraphToDot
       (lam v. int2string (sym2hash v))
-      (lam e. join ["(", expr2str e.0, ",", expr2str e.1, ")"])
-      g.graph
+      flatEOOElabGraphEdgeLabelToString
+      g
 
   sem flatEOOToString : FlatEOO -> String
   sem flatEOOToString =| eoo ->
@@ -105,7 +109,7 @@ lang FlatEOO = Cmp + PrettyPrint
                ",",
                eooQuantityTypeToString g.throughType,
                ")"
-             ], flatEOOElabGraphToDot expr2str g])
+             ], flatEOOElabGraphToDot g.graph])
            eoo.graphs)
     ]
 
@@ -133,13 +137,29 @@ lang FlatEOO = Cmp + PrettyPrint
     foldl
       (lam eoo. lam g.
         let terms = (unzip g.graph.edges).1 in
-        match elab terms g.graph with (circ, cut) in
-        let circ = map (lam eqn. (eqn.0, rhs g.throughType eqn.1)) circ in
-        let cut = map (lam eqn. (eqn.0, rhs g.acrossType eqn.1)) cut in
+        logDebug
+          (lam. strJoin "\n" [
+            "IM Matrix Column labels",
+            strJoin "," (map flatEOOElabGraphEdgeLabelToString terms)
+          ]);
+        match elab terms g.graph with (cut, circ, vertices) in
+        logDebug
+          (lam.
+            strJoin "\n" [
+              "Vertices:",
+              strJoin "," (map (lam v. int2string (sym2hash v)) vertices),
+              "F-Cutset Equations:",
+              strJoin "\n" (map (elabEquationScalarToString expr2str) cut),
+              "F-Circutset Equations:",
+              strJoin "\n" (map (elabEquationScalarToString expr2str) circ)
+            ]);
+        let cut = map (lam eqn. (eqn.0, rhs g.throughType eqn.1)) cut in
+        let circ = map (lam eqn. (eqn.0, rhs g.acrossType eqn.1)) circ in
+
         let eqns =
-          concat eoo.eqns (map (uncurry subf_) (concat circ cut))
+          concat eoo.eqns (map (uncurry subf_) (concat cut circ))
         in
-        { eoo with eqns = eqns })
+        { eoo with eqns = eqns, graphs = [] })
       eoo eoo.graphs
 end
 

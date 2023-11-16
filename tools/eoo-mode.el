@@ -31,6 +31,7 @@
         "if"
         "then"
         "else"
+        "begin"
         ))
 
 (defvar eoo--operators

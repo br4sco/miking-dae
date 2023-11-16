@@ -21,6 +21,10 @@ lang EOOCoreLang =
 
   sem eooCoreCompile : EOOCoreCompileOptions -> Expr -> Expr
   sem eooCoreCompile options =| ast ->
+    (if options.debug then
+      logSetLogLevel logLevel.debug
+     else ());
+
     -- Symbolize
     let symEnv = symEnvAddBuiltinTypes symEnvDefault (eooCoreBuiltinTypes ()) in
     let ast = symbolizeExpr symEnv ast in
@@ -33,9 +37,12 @@ lang EOOCoreLang =
 
     -- Flatten
     let flatEOO = eooFlatten ast in
+    logDebug (lam. strJoin "\n" ["Flat EOO model:", flatEOOToString flatEOO]);
 
     -- Eloborate Model Graphs
     let flatEOO = eooElaborateGraphs flatEOO in
+    logDebug
+      (lam. strJoin "\n" ["Elaborated Flat EOO model:", flatEOOToString flatEOO]);
 
     -- Compile DAE
     let ast =
@@ -55,5 +62,6 @@ lang EOOCoreLang =
         }
         daer
     in
+    logSetLogLevel logLevel.error;
     ast
 end

@@ -1,16 +1,4 @@
 
-def serialize : Int -> (Node * Node -> Model) -> ((Node * Node) -> Model)
-def serialize n f (n1, n2) =
-    let ns =
-      create (subi n 1) (\i. if eqi i (subi n 2) then n2 else gensym ())
-    in
-    let (eqns, n2) = foldl
-      (\acc. \n1. let (eqns, n2) = acc in (eqns; f (n1, n2), n1))
-      ([], n1) ns
-    in
-    eqns
-end
-
 main model
   def R = 1. end
   def L = 1. end

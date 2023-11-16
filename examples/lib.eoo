@@ -1,7 +1,11 @@
 type Model = [Equation]
-type Node = Symbol
 
-def Electrical = gensym () end
+-----------------------
+-- ELECTRICAL DOMAIN --
+-----------------------
+
+def Electrical = gensym() end
+type Node = Symbol
 
 --------------
 -- Resistor --
@@ -90,4 +94,110 @@ model VoltageSensor : Real * Node * Node -> Model
 model VoltageSensor(u, cathode, anode) =
 equation
   connect cathode to anode in Electrical with u across 0. through
+end
+
+
+
+--------------------------
+-- 1D ROTATIONAL DOMAIN --
+--------------------------
+
+def MechRot1D = gensym() end
+
+def world = gensym() end
+
+
+model Inertia : Real * Node -> Model
+model Inertia(J, point) =
+  var thI, taI : Real
+equation
+  J * thI'' + taI = 0.;
+  connect world to point in MechRot1D with thI across taI through
+end
+
+
+model Spring : Real * Node * Node -> Model
+model Spring(k, point1, point2) =
+  var thS, taS : Real
+equation
+  taS + k * thS = 0.;
+  connect point1 to point2 in MechRot1D with thS across taS through
+end
+
+
+model Damper : Real * Node * Node -> Model
+model Damper(d, point1, point2) =
+  var thD, taD : Real
+equation
+  taD + d * thD' = 0.;
+  connect point1 to point2 in MechRot1D with thD across taD through
+end
+
+
+model AngleSensor : Real * Node * Node -> Model
+model AngleSensor(th, point1, point2) =
+equation
+  connect point1 to point2 in MechRot1D with th across 0. through
+end
+
+
+model TorqueActuator : Real * Node * Node -> Model
+model TorqueActuator(ta, point1, point2) =
+  var thTA : Real
+equation
+  connect point1 to point2 in MechRot1D with thTA across ta through
+end
+
+
+-------------------------------
+-- MECHATRONIC DOMAIN --
+-------------------------------
+
+-------------------------------
+-- Electromotive force (EMF) --
+-------------------------------
+
+model EMF : Real * Real * Node * Node * Node * Node -> Model
+model EMF(Ku, Kta, cathode, anode, point1, point2) =
+  var iEMF, uEMF, thEMF, taEMF : Real
+equation
+  uEMF = Ku * thEMF';
+  taEMF = Kta * iEMF;
+  connect cathode to anode in Electrical with uEMF across iEMF through;
+  connect point1 to point2 in MechRot1D with thEMF across taEMF through
+end
+
+
+model DCMotor : Real * Real * Real * Real * Real * Real * Node * Node -> Model
+model DCMotor(R, L, G, Ku, Kta, u, point1, point2) =
+  node n1, n2, n3, n4
+equation
+  VoltageSource(u, n1, n4);
+  Resistor(R, n1, n2);
+  Inductor(L, n2, n3);
+  EMF(G * Ku, G * Kta, n3, n4, point1, point2)
+end
+
+---------------------
+-- META COMPONENTS --
+---------------------
+
+def serialize : Int -> (Node * Node -> Model) -> ((Node * Node) -> Model)
+def serialize n f (n1, n2) =
+  if eqi n 0 then []
+  else if eqi n 1 then f (n1, n2)
+  else
+    let ns =
+      create (subi n 1) (\i. if eqi i (subi n 2) then n2 else gensym ())
+    in
+    let (eqns, n2) = foldl
+      (\acc. \n1. let (eqns, n2) = acc in (eqns; f (n1, n2), n1))
+      ([], n1) ns
+    in
+    eqns
+end
+
+def sigmoid : Real * Real -> Real
+def sigmoid(t, b) =
+  1. / (1. + exp(0. - (t - b)))
 end

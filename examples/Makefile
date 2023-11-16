@@ -4,7 +4,7 @@ CORE_TOOL_COMMAND := ../build/${CORE_TOOL_NAME}
 TOOL_NAME=eoo
 TOOL_COMMAND := ../build/${TOOL_NAME}
 
-OKS := rlc_eoocore.OK cauer_eoocore.OK rlc_eoo.OK cauer_eoo.OK
+OKS := rlc_eoocore.OK cauer_eoocore.OK rlc_eoo.OK cauer_eoo.OK cps_eoo.OK inertia_eoo.OK dcmotor_eoo.OK
 EXES := $(OKS:.OK=.exe)
 DAES := $(OKS:.OK=.mc)
 
@@ -36,7 +36,7 @@ test: $(OKS) $(EXES) $(DAES)
 
 %_eoo.mc: %.eoo
 	@cat lib.eoo $< > src.eoo;
-	@$(TOOL_COMMAND) src.eoo > $@;
+	@$(TOOL_COMMAND) --debug-backend src.eoo > $@;
 	@rm src.eoo
 
 clean:
