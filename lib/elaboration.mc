@@ -197,11 +197,11 @@ mexpr
 
   match elab terms g with (cut, circ, _) in
   utest cut with [
-    ("iL1", [(negi 1, "iV7")]),
-    ("iL2", [(1, "iC6")]),
-    ("iR3", [(1, "iC6")]),
-    ("iR4", [(negi 1, "iC6"), (1, "iV7")]),
-    ("iR5", [(1, "iV7")])
+    ("iL1", [(1, "iV7")]),
+    ("iL2", [(negi 1, "iC6")]),
+    ("iR3", [(negi 1, "iC6")]),
+    ("iR4", [(1, "iC6"), (negi 1, "iV7")]),
+    ("iR5", [(negi 1, "iV7")])
   ] using eq else toString in
   utest circ with [
     ("uC6", [(1, "uL2"), (1, "uR3"), (negi 1, "uR4")]),
