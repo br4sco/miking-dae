@@ -1,15 +1,17 @@
 
 main model
-  def R = 0.3 end
-  def L = 0.2 end
-  def C = 0.1 end
-  node n1, n2, n3
-  var iL, uL : Real
+  def R = 0.2 end
+  def L = 1. end
+  def C = 1. end
+  node n1, n2, n3, n4, n5
+  var t, i : Real
 equation
-  initial iL = 1.;
+  t' = 1.;
   Resistor(R, n1, n2);
-  InductorOutput(L, n2, n3, uL, iL);
-  Capacitor(C, n3, n1)
+  Inductor(L, n2, n3);
+  Capacitor(C, n3, n4);
+  VoltageSource(sigmoid(t, 7.), n5, n4);
+  CurrentSensor(i, n5, n1)
 output
-  (iL, uL)
+  (t, i)
 end

@@ -36,7 +36,7 @@ test: $(OKS) $(EXES) $(DAES)
 
 %_eoo.mc: %.eoo
 	@cat lib.eoo $< > src.eoo;
-	@$(TOOL_COMMAND) --debug-backend src.eoo > $@;
+	@$(TOOL_COMMAND) --debug-desugaring --debug-backend src.eoo > $@;
 	@rm src.eoo
 
 clean:

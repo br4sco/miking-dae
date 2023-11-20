@@ -96,6 +96,17 @@ equation
   connect cathode to anode in Electrical with u across 0. through
 end
 
+--------------------
+-- Current Sensor --
+--------------------
+
+-- Current sensor model component `i` is the measured current from the `cathode`
+-- to the `anode`.
+model CurrentSensor : Real * Node * Node -> Model
+model CurrentSensor(i, cathode, anode) =
+equation
+  connect cathode to anode in Electrical with 0. across i through
+end
 
 
 --------------------------
@@ -200,4 +211,9 @@ end
 def sigmoid : Real * Real -> Real
 def sigmoid(t, b) =
   1. / (1. + exp(0. - (t - b)))
+end
+
+def step : Real * Real -> Real
+def step(t, b) =
+  if lt t b then 0. else 1.
 end
